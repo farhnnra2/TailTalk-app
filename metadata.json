@@ -1,0 +1,12 @@
+{
+  "name": "TailTalk",
+  "description": "Personalized pet care application with AI-powered analysis for pet profiles, care plans, and safety checks.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "AI Pet Analysis",
+    "Smart Care Plans",
+    "Food Safety Checker"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Pet": {
+      "title": "Pet",
+      "description": "Pet profile and analysis results",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "category": { "type": "string", "enum": ["Cat", "Dog", "Bird", "Other"] },
+        "breed": { "type": "string" },
+        "ageEstimation": { "type": "string" },
+        "energyLevel": { "type": "string" },
+        "carePlan": { "type": "string" },
+        "diyHacks": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "imageUrl", "ownerId", "breed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/pets/{petId}": {
+      "schema": "Pet",
+      "description": "Pet profiles belonging to a user"
+    }
+  }
+}

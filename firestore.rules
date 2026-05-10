@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Profile Rules ---
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+                     && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
+      
+      function isValidUser(data) {
+        return data.uid == request.auth.uid
+          && data.email is string && data.email.size() <= 256
+          && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 128))
+          && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1024));
+      }
+
+      // --- Pet Profile Rules ---
+      match /pets/{petId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPet(incoming()) && isValidId(petId);
+        allow update: if isOwner(userId) && isValidPet(incoming())
+                       && incoming().ownerId == existing().ownerId
+                       && (
+                         // Action: Update Details
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'updatedAt'])
+                       );
+        allow delete: if isOwner(userId);
+
+        function isValidPet(data) {
+          return data.ownerId == request.auth.uid
+            && data.name is string && data.name.size() > 0 && data.name.size() <= 64
+            && data.imageUrl is string && data.imageUrl.size() <= 1024
+            && data.breed is string && data.breed.size() <= 128
+            && (data.ageEstimation == null || (data.ageEstimation is string && data.ageEstimation.size() <= 64))
+            && (data.energyLevel == null || (data.energyLevel is string && data.energyLevel.size() <= 64))
+            && (data.carePlan == null || (data.carePlan is string && data.carePlan.size() <= 10000))
+            && (data.diyHacks == null || (data.diyHacks is string && data.diyHacks.size() <= 10000));
+        }
+      }
+    }
+  }
+}
