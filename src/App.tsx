@@ -5,13 +5,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { auth, db, signInWithGoogle } from './lib/firebase';
 import { Splash } from './components/Splash';
 import { Dashboard } from './components/Dashboard';
 import { PetAnalysis } from './components/PetAnalysis';
-import { PetProfile, AnalysisResult } from './types';
+import { CameraModal } from './components/CameraModal';
+import { PetProfile, AnalysisResult, AppNotification } from './types';
 import { analyzePetPhoto } from './services/geminiService';
+import { resizeImage } from './lib/imageResizer';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -21,42 +23,104 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('splash');
   const [user, setUser] = useState<User | null>(null);
   const [pets, setPets] = useState<PetProfile[]>([]);
-  const [isLoding, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [currentAnalysis, setCurrentAnalysis] = useState<{ image: string, result: AnalysisResult } | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState<{ image: string, result: AnalysisResult, id?: string, name?: string } | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([
+    { id: '1', text: "Welcome to TailTalk! Scan your pet to get started.", time: "Joined", isRead: false }
+  ]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleFirestoreError = (error: unknown, operation: string, path: string | null) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        emailVerified: auth.currentUser?.emailVerified,
+      },
+      operation,
+      path
+    };
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    return new Error(JSON.stringify(errInfo));
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    // Auth Listener
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
         setScreen('dashboard');
-        // Load pets
-        const q = query(
-          collection(db, 'users', u.uid, 'pets')
-        );
-        const unsubPets = onSnapshot(q, (snapshot) => {
-          const petList = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          } as PetProfile));
-          setPets(petList);
-        });
-        return unsubPets;
       } else {
         setScreen('splash');
       }
       setIsLoading(false);
+    }, (error) => {
+      console.error("Auth state change error:", error);
+      setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
+
+  useEffect(() => {
+    // Pets Listener (only if user is logged in)
+    if (!user) {
+      setPets([]);
+      return;
+    }
+
+    const path = `users/${user.uid}/pets`;
+    const q = query(collection(db, path));
+    const unsubscribePets = onSnapshot(q, (snapshot) => {
+      const petList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as PetProfile));
+      setPets(petList);
+    }, (error) => {
+      handleFirestoreError(error, 'LIST', path);
+    });
+
+    return () => unsubscribePets();
+  }, [user]);
 
   const handleGetStarted = async () => {
     try {
+      setIsLoading(true);
       await signInWithGoogle();
     } catch (error) {
       console.error("Sign in failed", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const addNotification = (text: string) => {
+    const newNotif: AppNotification = {
+      id: Math.random().toString(36).substr(2, 9),
+      text,
+      time: "Now",
+      isRead: false
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const processImage = async (rawBase64: string) => {
+    setIsAiProcessing(true);
+    try {
+      const base64 = await resizeImage(rawBase64);
+      const result = await analyzePetPhoto(base64);
+      setCurrentAnalysis({ image: base64, result });
+      setScreen('analysis');
+      setShowCamera(false);
+    } catch (error) {
+      console.error("AI Analysis failed", error);
+      alert("Failed to analyze pet photo. Please try again with a clearer image.");
+    } finally {
+      setIsAiProcessing(false);
     }
   };
 
@@ -64,57 +128,70 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    setIsAiProcessing(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      try {
-        const result = await analyzePetPhoto(base64);
-        setCurrentAnalysis({ image: base64, result });
-        setScreen('analysis');
-      } catch (error) {
-        console.error("AI Analysis failed", error);
-        alert("Failed to analyze pet photo. Please try again with a clearer image.");
-      } finally {
-        setIsAiProcessing(false);
-      }
+      const b64 = event.target?.result as string;
+      await processImage(b64);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleSavePet = async (name: string) => {
+  const handleSavePet = async (name: string, feedingData?: { enabled: boolean, times: { breakfast: string, lunch: string, dinner: string } }) => {
     if (!user || !currentAnalysis) return;
 
+    const path = `users/${user.uid}/pets`;
     try {
-      await addDoc(collection(db, 'users', user.uid, 'pets'), {
+      const data: any = {
         name,
-        imageUrl: currentAnalysis.image, // In production, upload to Storage. For now, base64 is okay for small protos.
-        breed: currentAnalysis.result.breed,
-        category: getCategoryFromBreed(currentAnalysis.result.breed),
-        ageEstimation: currentAnalysis.result.ageEstimation,
-        energyLevel: currentAnalysis.result.energyLevel,
-        carePlan: currentAnalysis.result.carePlan,
-        diyHacks: currentAnalysis.result.diyHacks,
-        ownerId: user.uid,
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (feedingData) {
+        data.feedingRemindersEnabled = feedingData.enabled;
+        data.feedingTimes = feedingData.times;
+      }
+
+      if (currentAnalysis.id) {
+        // Update existing
+        await updateDoc(doc(db, `${path}/${currentAnalysis.id}`), data);
+      } else {
+        // Create new
+        await addDoc(collection(db, path), {
+          ...data,
+          imageUrl: currentAnalysis.image,
+          breed: currentAnalysis.result.breed,
+          category: currentAnalysis.result.category,
+          ageEstimation: currentAnalysis.result.ageEstimation,
+          energyLevel: currentAnalysis.result.energyLevel,
+          carePlan: currentAnalysis.result.carePlan,
+          diyHacks: currentAnalysis.result.diyHacks,
+          ownerId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      
       setScreen('dashboard');
       setCurrentAnalysis(null);
     } catch (error) {
-      console.error("Failed to save pet", error);
+      handleFirestoreError(error, 'WRITE', path);
+      alert("Failed to save pet profile. " + (error instanceof Error ? error.message : ""));
     }
   };
 
-  const getCategoryFromBreed = (breed: string): string => {
-    const b = breed.toLowerCase();
-    if (b.includes('cat') || b.includes('kitten') || b.includes('siamese') || b.includes('persian')) return 'Cat';
-    if (b.includes('dog') || b.includes('puppy') || b.includes('retriever') || b.includes('bulldog')) return 'Dog';
-    if (b.includes('bird') || b.includes('parrot') || b.includes('owl')) return 'Bird';
-    return 'Other';
+  const handleDeletePet = async (petId: string) => {
+    if (!user) return;
+    const path = `users/${user.uid}/pets/${petId}`;
+    try {
+      await deleteDoc(doc(db, path));
+      setScreen('dashboard');
+      setCurrentAnalysis(null);
+    } catch (error) {
+      handleFirestoreError(error, 'DELETE', path);
+      alert("Failed to delete pet profile.");
+    }
   };
 
-  if (isLoding) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-cream">
         <Loader2 className="w-8 h-8 text-brand-orange animate-spin" />
@@ -123,8 +200,9 @@ export default function App() {
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-brand-cream relative">
-      <AnimatePresence mode="wait">
+    <div className="min-h-screen bg-brand-cream relative overflow-x-hidden">
+      <div className="mx-auto w-full max-w-7xl overflow-x-hidden">
+        <AnimatePresence mode="wait">
         {screen === 'splash' && (
           <motion.div key="splash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Splash onGetStarted={handleGetStarted} />
@@ -135,19 +213,28 @@ export default function App() {
           <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Dashboard 
               pets={pets} 
+              notifications={notifications}
               onScanPhoto={() => fileInputRef.current?.click()} 
+              onOpenCamera={() => setShowCamera(true)}
               onSelectPet={(pet) => {
                 setCurrentAnalysis({ 
+                  id: pet.id,
+                  name: pet.name,
                   image: pet.imageUrl, 
                   result: { 
+                    category: pet.category,
                     breed: pet.breed, 
                     ageEstimation: pet.ageEstimation, 
                     energyLevel: pet.energyLevel,
                     carePlan: pet.carePlan,
                     diyHacks: pet.diyHacks,
                     foodSafety: "Ask me about food safety!"
-                  } 
-                });
+                  },
+                  feedingData: {
+                    enabled: pet.feedingRemindersEnabled || false,
+                    times: pet.feedingTimes || { breakfast: '08:00', lunch: '13:00', dinner: '19:00' }
+                  }
+                } as any);
                 setScreen('analysis');
               }}
             />
@@ -157,10 +244,16 @@ export default function App() {
         {screen === 'analysis' && currentAnalysis && (
           <motion.div key="analysis" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <PetAnalysis 
+              key={currentAnalysis.id || 'new-analysis'}
               image={currentAnalysis.image} 
               analysis={currentAnalysis.result} 
+              initialName={currentAnalysis.name}
+              isExisting={!!currentAnalysis.id}
+              initialFeedingData={(currentAnalysis as any).feedingData}
               onBack={() => setScreen('dashboard')}
               onSave={handleSavePet}
+              onDelete={currentAnalysis.id ? () => handleDeletePet(currentAnalysis.id!) : undefined}
+              addNotification={addNotification}
             />
           </motion.div>
         )}
@@ -175,14 +268,24 @@ export default function App() {
         accept="image/*" 
       />
 
+      <AnimatePresence>
+        {showCamera && (
+          <CameraModal 
+            onCapture={processImage}
+            onClose={() => setShowCamera(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Loading Overlay for AI */}
       {isAiProcessing && (
         <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center">
           <Loader2 className="w-12 h-12 text-brand-orange animate-spin mb-6" />
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Analyzing Your Pet...</h3>
-          <p className="text-gray-500">Gemini is identifying breeds, estimating age, and preparing personalized care tips for your friend.</p>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">TailTalk Scanning...</h3>
+          <p className="text-gray-500 text-sm max-w-xs mx-auto">TailTalk AI is identifying breeds, estimating age, and preparing personalized care tips for your friend.</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

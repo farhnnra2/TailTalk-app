@@ -3,6 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface AppNotification {
+  id: string;
+  text: string;
+  time: string;
+  isRead?: boolean;
+}
+
 export type PetCategory = 'All' | 'Cat' | 'Dog' | 'Bird' | 'Other';
 
 export interface PetProfile {
@@ -18,6 +25,12 @@ export interface PetProfile {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  feedingRemindersEnabled?: boolean;
+  feedingTimes?: {
+    breakfast?: string;
+    lunch?: string;
+    dinner?: string;
+  };
 }
 
 export interface UserProfile {
@@ -29,10 +42,12 @@ export interface UserProfile {
 }
 
 export interface AnalysisResult {
+  category: PetCategory;
   breed: string;
   ageEstimation: string;
   energyLevel: string;
   carePlan: string;
   diyHacks: string;
   foodSafety: string;
+  nutritionTip?: string;
 }

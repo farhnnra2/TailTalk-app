@@ -28,7 +28,16 @@
         "diyHacks": { "type": "string" },
         "ownerId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "feedingRemindersEnabled": { "type": "boolean" },
+        "feedingTimes": {
+          "type": "object",
+          "properties": {
+            "breakfast": { "type": "string" },
+            "lunch": { "type": "string" },
+            "dinner": { "type": "string" }
+          }
+        }
       },
       "required": ["name", "imageUrl", "ownerId", "breed"]
     }

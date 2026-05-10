@@ -7,12 +7,13 @@ export const analyzePetPhoto = async (base64Image: string): Promise<AnalysisResu
   const model = "gemini-3-flash-preview";
   
   const prompt = `Analyze this pet photo and provide:
-1. Breed Detection
-2. Age Estimation (based on visual cues)
-3. Energy Level (Calm, Moderate, High, Very High)
-4. A Personalized Care Plan (3 actionable tips)
-5. DIY Pet Hacks (2 creative ideas)
-6. A 'Is This Food Safe?' dynamic checker for common foods like Chocolate, Grapes, Onions, and Avocado.
+1. Category (Strictly one of: Cat, Dog, Bird, Other)
+2. Breed Detection
+3. Age Estimation (based on visual cues)
+4. Energy Level (Calm, Moderate, High, Very High)
+5. A Personalized Care Plan (3 actionable tips)
+6. DIY Pet Hacks (2 creative ideas)
+7. A 'Is This Food Safe?' dynamic checker for common foods like Chocolate, Grapes, Onions, and Avocado.
 
 Return the result strictly in JSON format.`;
 
@@ -34,6 +35,7 @@ Return the result strictly in JSON format.`;
       responseSchema: {
         type: Type.OBJECT,
         properties: {
+          category: { type: Type.STRING },
           breed: { type: Type.STRING },
           ageEstimation: { type: Type.STRING },
           energyLevel: { type: Type.STRING },
@@ -41,7 +43,7 @@ Return the result strictly in JSON format.`;
           diyHacks: { type: Type.STRING },
           foodSafety: { type: Type.STRING },
         },
-        required: ["breed", "ageEstimation", "energyLevel", "carePlan", "diyHacks", "foodSafety"],
+        required: ["category", "breed", "ageEstimation", "energyLevel", "carePlan", "diyHacks", "foodSafety"],
       },
     },
   });
@@ -58,4 +60,12 @@ export const checkFoodSafety = async (food: string, petType: string): Promise<st
     contents: `Explain if ${food} is safe for a ${petType} to eat. Be concise and accurate.`,
   });
   return response.text ?? "Unable to determine safety.";
+}
+
+export const getNutritionTip = async (time: string, petBreed: string): Promise<string> => {
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `Give a short, helpful nutrition tip for a ${petBreed} based on the feeding time ${time}. Be concise (max 1 sentence).`,
+  });
+  return response.text ?? "Remember to provide fresh water always!";
 }

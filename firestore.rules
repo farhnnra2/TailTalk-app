@@ -45,24 +45,30 @@ service cloud.firestore {
       match /pets/{petId} {
         allow get: if isOwner(userId);
         allow list: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidPet(incoming()) && isValidId(petId);
+        allow create: if isOwner(userId) && isValidPet(incoming());
         allow update: if isOwner(userId) && isValidPet(incoming())
                        && incoming().ownerId == existing().ownerId
                        && (
                          // Action: Update Details
-                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'updatedAt'])
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'updatedAt', 'feedingRemindersEnabled', 'feedingTimes'])
                        );
         allow delete: if isOwner(userId);
 
         function isValidPet(data) {
+          // Strict validation of the pet document structure
           return data.ownerId == request.auth.uid
-            && data.name is string && data.name.size() > 0 && data.name.size() <= 64
-            && data.imageUrl is string && data.imageUrl.size() <= 1024
-            && data.breed is string && data.breed.size() <= 128
-            && (data.ageEstimation == null || (data.ageEstimation is string && data.ageEstimation.size() <= 64))
-            && (data.energyLevel == null || (data.energyLevel is string && data.energyLevel.size() <= 64))
-            && (data.carePlan == null || (data.carePlan is string && data.carePlan.size() <= 10000))
-            && (data.diyHacks == null || (data.diyHacks is string && data.diyHacks.size() <= 10000));
+            && data.name is string && data.name.size() > 0 && data.name.size() <= 128
+            && data.imageUrl is string && data.imageUrl.size() <= 2000000 
+            && data.category is string && data.category.size() <= 32
+            && data.breed is string && data.breed.size() <= 256
+            && (data.ageEstimation == null || (data.ageEstimation is string && data.ageEstimation.size() <= 128))
+            && (data.energyLevel == null || (data.energyLevel is string && data.energyLevel.size() <= 128))
+            && (data.carePlan == null || (data.carePlan is string && data.carePlan.size() <= 20000))
+            && (data.diyHacks == null || (data.diyHacks is string && data.diyHacks.size() <= 20000))
+            && (data.feedingRemindersEnabled == null || data.feedingRemindersEnabled is bool)
+            && (data.feedingTimes == null || data.feedingTimes is map)
+            && data.createdAt != null
+            && data.updatedAt != null;
         }
       }
     }
