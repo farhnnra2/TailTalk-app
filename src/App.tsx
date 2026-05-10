@@ -11,17 +11,18 @@ import { Splash } from './components/Splash';
 import { Dashboard } from './components/Dashboard';
 import { PetAnalysis } from './components/PetAnalysis';
 import { CameraModal } from './components/CameraModal';
-import { PetProfile, AnalysisResult, AppNotification } from './types';
+import { UserProfile } from './components/UserProfile';
+import { PetProfile, AnalysisResult, AppNotification, UserProfile as UserProfileType } from './types';
 import { analyzePetPhoto } from './services/geminiService';
 import { resizeImage } from './lib/imageResizer';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type Screen = 'splash' | 'dashboard' | 'analysis';
+type Screen = 'splash' | 'dashboard' | 'analysis' | 'profile';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('splash');
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserProfileType | null>(null);
   const [pets, setPets] = useState<PetProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -50,10 +51,17 @@ export default function App() {
   useEffect(() => {
     // Auth Listener
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
-      setUser(u);
       if (u) {
+        setUser({
+          uid: u.uid,
+          email: u.email || '',
+          displayName: u.displayName,
+          photoURL: u.photoURL,
+          createdAt: u.metadata.creationTime || new Date().toISOString()
+        });
         setScreen('dashboard');
       } else {
+        setUser(null);
         setScreen('splash');
       }
       setIsLoading(false);
@@ -191,6 +199,14 @@ export default function App() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-cream">
@@ -212,10 +228,12 @@ export default function App() {
         {screen === 'dashboard' && (
           <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Dashboard 
+              user={user}
               pets={pets} 
               notifications={notifications}
               onScanPhoto={() => fileInputRef.current?.click()} 
               onOpenCamera={() => setShowCamera(true)}
+              onOpenProfile={() => setScreen('profile')}
               onSelectPet={(pet) => {
                 setCurrentAnalysis({ 
                   id: pet.id,
@@ -254,6 +272,17 @@ export default function App() {
               onSave={handleSavePet}
               onDelete={currentAnalysis.id ? () => handleDeletePet(currentAnalysis.id!) : undefined}
               addNotification={addNotification}
+            />
+          </motion.div>
+        )}
+
+        {screen === 'profile' && user && (
+          <motion.div key="profile" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+            <UserProfile 
+              user={user}
+              pets={pets}
+              onBack={() => setScreen('dashboard')}
+              onLogout={handleLogout}
             />
           </motion.div>
         )}

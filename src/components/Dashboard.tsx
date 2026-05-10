@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Bell, Camera, ChevronRight, Filter, RefreshCw, X } from 'lucide-react';
-import { PetProfile, PetCategory, AppNotification } from '../types';
+import { Search, Bell, Camera, ChevronRight, Filter, RefreshCw, X, User as UserIcon } from 'lucide-react';
+import { PetProfile, PetCategory, AppNotification, UserProfile } from '../types';
 import { PET_HACKS } from '../constants';
 import { cn } from '../lib/utils';
 
 interface DashboardProps {
+  user: UserProfile | null;
   pets: PetProfile[];
   notifications: AppNotification[];
   onScanPhoto: () => void;
   onOpenCamera: () => void;
   onSelectPet: (pet: PetProfile) => void;
+  onOpenProfile: () => void;
 }
 
 const categories: PetCategory[] = ['All', 'Cat', 'Dog', 'Bird', 'Other'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ pets, notifications, onScanPhoto, onOpenCamera, onSelectPet }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications, onScanPhoto, onOpenCamera, onSelectPet, onOpenProfile }) => {
   const [selectedCategory, setSelectedCategory] = useState<PetCategory>('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -105,7 +107,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ pets, notifications, onSca
                             }}
                             className="bg-white p-3 rounded-[24px] shadow-sm flex items-center gap-3 cursor-pointer hover:shadow-md transition-all border border-orange-50"
                           >
-                            <img src={pet.imageUrl} className="w-12 h-12 rounded-2xl object-cover" />
+                            <img src={pet.imageUrl} referrerPolicy="no-referrer" className="w-12 h-12 rounded-2xl object-cover" />
                             <div>
                               <p className="font-bold text-sm text-gray-800 leading-tight">{pet.name}</p>
                               <p className="text-[10px] text-gray-400">{pet.breed}</p>
@@ -144,15 +146,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ pets, notifications, onSca
       </AnimatePresence>
       {/* Header */}
       <header className="flex justify-between items-center mb-8 max-w-5xl mx-auto w-full relative">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-brand-orange">
-            <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=2080&auto=format&fit=crop" alt="User" className="w-full h-full object-cover" />
+        <button 
+          onClick={onOpenProfile}
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity text-left"
+        >
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-brand-orange bg-white flex items-center justify-center">
+            {user?.photoURL ? (
+              <img src={user.photoURL} referrerPolicy="no-referrer" alt={user.displayName || 'User'} className="w-full h-full object-cover" />
+            ) : (
+              <UserIcon className="w-6 h-6 text-brand-orange" />
+            )}
           </div>
           <div>
             <p className="text-gray-400 text-[10px] sm:text-xs">Welcome back 👋</p>
-            <h2 className="font-bold text-sm sm:text-xl">Pet Parent</h2>
+            <h2 className="font-bold text-sm sm:text-xl truncate max-w-[120px] sm:max-w-none">
+              {user?.displayName || 'Pet Parent'}
+            </h2>
           </div>
-        </div>
+        </button>
         <div className="flex gap-2">
           <button 
             onClick={() => setIsSearchOpen(true)}
@@ -206,6 +217,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ pets, notifications, onSca
         <div className="absolute right-0 bottom-0 w-1/3 sm:w-1/2 h-full">
            <img 
             src="https://images.unsplash.com/photo-1516734212186-a967f81ad0d7?q=80&w=2071&auto=format&fit=crop" 
+            referrerPolicy="no-referrer"
             alt="Hero Pet" 
             className="w-full h-full object-cover"
           />
@@ -291,7 +303,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ pets, notifications, onSca
                   className="bg-white p-4 rounded-[32px] shadow-sm hover:shadow-xl transition-all cursor-pointer border border-gray-50 group"
                 >
                   <div className="w-full aspect-square rounded-[24px] overflow-hidden mb-4 relative">
-                    <img src={pet.imageUrl} alt={pet.name} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
+                    <img src={pet.imageUrl} referrerPolicy="no-referrer" alt={pet.name} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
                     <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-brand-orange">{pet.category}</div>
                   </div>
                   <h5 className="font-extrabold text-base text-gray-800 mb-1">{pet.name}</h5>

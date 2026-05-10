@@ -69,3 +69,15 @@ export const getNutritionTip = async (time: string, petBreed: string): Promise<s
   });
   return response.text ?? "Remember to provide fresh water always!";
 }
+
+export const getCollectiveProTip = async (pets: any[]): Promise<string> => {
+  if (pets.length === 0) return "Start scanning your pets to get personalized collective advice!";
+  const petDescriptions = pets.map(p => `${p.name} (a ${p.breed})`).join(', ');
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `The user owns the following pets: ${petDescriptions}. 
+    Provide one highly specific and creative 'Pro-Tip' for managing these pets collectively or improving their shared environment. 
+    Be warm, professional, witty and concise (max 2-3 sentences).`,
+  });
+  return response.text ?? "Focus on shared play and routine consistency for all your pets.";
+}

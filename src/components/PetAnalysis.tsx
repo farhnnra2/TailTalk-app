@@ -170,7 +170,7 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
     <div className="flex flex-col lg:flex-row min-h-screen bg-brand-cream overflow-x-hidden">
       {/* Top Background / Image - Responsive: Side by side on LG */}
       <div className="relative h-[45vh] lg:h-screen lg:w-1/2 w-full lg:fixed lg:left-0 lg:top-0">
-        <img src={image} alt="Pet" className="w-full h-full object-cover" />
+        <img src={image} referrerPolicy="no-referrer" alt="Pet" className="w-full h-full object-cover" />
         <div className="absolute top-12 left-6 right-6 flex justify-between items-center z-20">
           <button 
             onClick={onBack}
