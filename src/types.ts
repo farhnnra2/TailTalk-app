@@ -31,6 +31,8 @@ export interface PetProfile {
     lunch?: string;
     dinner?: string;
   };
+  foodRecommendations?: string;
+  nutritionTip?: string;
 }
 
 export interface UserProfile {
@@ -50,4 +52,5 @@ export interface AnalysisResult {
   diyHacks: string;
   foodSafety: string;
   nutritionTip?: string;
+  foodRecommendations?: string;
 }

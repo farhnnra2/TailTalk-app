@@ -81,14 +81,17 @@ export default function App() {
     }
 
     const path = `users/${user.uid}/pets`;
+    console.log(`Starting pets listener for path: ${path}`);
     const q = query(collection(db, path));
     const unsubscribePets = onSnapshot(q, (snapshot) => {
+      console.log(`Pets snapshot received. Count: ${snapshot.size}`);
       const petList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as PetProfile));
       setPets(petList);
     }, (error) => {
+      console.error(`Pets listener failed for path ${path}:`, error);
       handleFirestoreError(error, 'LIST', path);
     });
 
@@ -144,7 +147,7 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const handleSavePet = async (name: string, feedingData?: { enabled: boolean, times: { breakfast: string, lunch: string, dinner: string } }) => {
+  const handleSavePet = async (name: string, feedingData?: { enabled: boolean, times: { breakfast: string, lunch: string, dinner: string } }, additionalAnalysis?: Partial<AnalysisResult>) => {
     if (!user || !currentAnalysis) return;
 
     const path = `users/${user.uid}/pets`;
@@ -159,6 +162,12 @@ export default function App() {
         data.feedingTimes = feedingData.times;
       }
 
+      // Include any newly generated analysis parts
+      if (additionalAnalysis) {
+        if (additionalAnalysis.foodRecommendations) data.foodRecommendations = additionalAnalysis.foodRecommendations;
+        if (additionalAnalysis.nutritionTip) data.nutritionTip = additionalAnalysis.nutritionTip;
+      }
+
       if (currentAnalysis.id) {
         // Update existing
         await updateDoc(doc(db, `${path}/${currentAnalysis.id}`), data);
@@ -166,13 +175,8 @@ export default function App() {
         // Create new
         await addDoc(collection(db, path), {
           ...data,
+          ...currentAnalysis.result,
           imageUrl: currentAnalysis.image,
-          breed: currentAnalysis.result.breed,
-          category: currentAnalysis.result.category,
-          ageEstimation: currentAnalysis.result.ageEstimation,
-          energyLevel: currentAnalysis.result.energyLevel,
-          carePlan: currentAnalysis.result.carePlan,
-          diyHacks: currentAnalysis.result.diyHacks,
           ownerId: user.uid,
           createdAt: serverTimestamp(),
         });
@@ -246,7 +250,9 @@ export default function App() {
                     energyLevel: pet.energyLevel,
                     carePlan: pet.carePlan,
                     diyHacks: pet.diyHacks,
-                    foodSafety: "Ask me about food safety!"
+                    foodSafety: "Ask me about food safety!",
+                    foodRecommendations: pet.foodRecommendations,
+                    nutritionTip: pet.nutritionTip
                   },
                   feedingData: {
                     enabled: pet.feedingRemindersEnabled || false,
@@ -270,6 +276,18 @@ export default function App() {
               initialFeedingData={(currentAnalysis as any).feedingData}
               onBack={() => setScreen('dashboard')}
               onSave={handleSavePet}
+              onUpdateAnalysis={async (updates) => {
+                if (!user || !currentAnalysis.id) return;
+                const path = `users/${user.uid}/pets/${currentAnalysis.id}`;
+                try {
+                  await updateDoc(doc(db, path), {
+                    ...updates,
+                    updatedAt: serverTimestamp()
+                  });
+                } catch (error) {
+                  console.error("Silent analysis update failed", error);
+                }
+              }}
               onDelete={currentAnalysis.id ? () => handleDeletePet(currentAnalysis.id!) : undefined}
               addNotification={addNotification}
             />

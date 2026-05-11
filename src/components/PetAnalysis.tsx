@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { ArrowLeft, ChevronDown, ChevronUp, ShieldCheck, Zap, Info, Clock, CheckCircle2, Bell, Utensils } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, ShieldCheck, Zap, Info, Clock, CheckCircle2, Bell, Utensils, RefreshCw } from 'lucide-react';
 import { AnalysisResult } from '../types';
-import { checkFoodSafety, getNutritionTip } from '../services/geminiService';
+import { checkFoodSafety, getNutritionTip, getFoodRecommendations } from '../services/geminiService';
 import { cn } from '../lib/utils';
 
 interface FeedingTimes {
@@ -16,7 +16,8 @@ interface PetAnalysisProps {
   image: string;
   analysis: AnalysisResult;
   onBack: () => void;
-  onSave?: (name: string, feedingData?: { enabled: boolean, times: FeedingTimes }) => void;
+  onSave?: (name: string, feedingData?: { enabled: boolean, times: FeedingTimes }, additionalAnalysis?: Partial<AnalysisResult>) => void;
+  onUpdateAnalysis?: (updates: Partial<AnalysisResult>) => void;
   onDelete?: () => void;
   initialName?: string;
   isExisting?: boolean;
@@ -29,6 +30,7 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
   analysis, 
   onBack, 
   onSave, 
+  onUpdateAnalysis,
   onDelete,
   initialName = '',
   isExisting = false,
@@ -51,12 +53,13 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
     lunch: '13:00',
     dinner: '19:00'
   });
-  const [nutritionTip, setNutritionTip] = useState('');
+  const [nutritionTip, setNutritionTip] = useState(analysis.nutritionTip || '');
   const [isLoadingTip, setIsLoadingTip] = useState(false);
+  const [foodRecommendations, setFoodRecommendations] = useState(analysis.foodRecommendations || '');
+  const [isLoadingFoodRecs, setIsLoadingFoodRecs] = useState(false);
 
   useEffect(() => {
-    if (feedingEnabled) {
-      fetchNutritionTip();
+    if (feedingEnabled && !nutritionTip) {
       requestNotificationPermission();
     }
   }, [feedingEnabled]);
@@ -66,10 +69,30 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
     try {
       const tip = await getNutritionTip(feedingTimes.breakfast, analysis.breed);
       setNutritionTip(tip);
+      // Persist immediately if it's an existing pet
+      if (isExisting && onUpdateAnalysis) {
+        onUpdateAnalysis({ nutritionTip: tip });
+      }
     } catch (error) {
       console.error("Failed to fetch nutrition tip", error);
     } finally {
       setIsLoadingTip(false);
+    }
+  };
+
+  const fetchFoodRecommendations = async () => {
+    setIsLoadingFoodRecs(true);
+    try {
+      const recs = await getFoodRecommendations(analysis.category, analysis.breed);
+      setFoodRecommendations(recs);
+      // Persist immediately if it's an existing pet
+      if (isExisting && onUpdateAnalysis) {
+        onUpdateAnalysis({ foodRecommendations: recs });
+      }
+    } catch (error) {
+      console.error("Failed to fetch food recommendations", error);
+    } finally {
+      setIsLoadingFoodRecs(false);
     }
   };
 
@@ -374,12 +397,20 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
                         <div className="absolute top-0 left-0 w-1 h-full bg-brand-orange/50" />
                         <div className="flex justify-between items-start mb-2">
                           <h5 className="text-[10px] uppercase font-black text-brand-orange">TailTalk Nutrition Tip</h5>
-                          <button 
-                            onClick={handleTestNotification}
-                            className="text-[10px] font-bold text-gray-400 hover:text-brand-orange flex items-center gap-1"
-                          >
-                            <Bell className="w-3 h-3" /> Test Alert
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              onClick={fetchNutritionTip}
+                              className="text-[10px] font-bold text-gray-400 hover:text-brand-orange flex items-center gap-1"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isLoadingTip ? 'animate-spin' : ''}`} /> Regenerate
+                            </button>
+                            <button 
+                              onClick={handleTestNotification}
+                              className="text-[10px] font-bold text-gray-400 hover:text-brand-orange flex items-center gap-1"
+                            >
+                              <Bell className="w-3 h-3" /> Test Alert
+                            </button>
+                          </div>
                         </div>
                         {isLoadingTip ? (
                           <div className="animate-pulse flex space-y-2 flex-col">
@@ -414,6 +445,50 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
             content={analysis.diyHacks}
             icon={<Zap className="w-6 h-6 text-brand-orange" />}
           />
+
+          <section className="bg-white rounded-[32px] shadow-sm overflow-hidden border border-gray-100">
+            <button 
+              onClick={() => toggleSection('food-recs')}
+              className="w-full flex items-center justify-between p-6 sm:p-8 hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <Utensils className="w-6 h-6 text-brand-orange" />
+                <h4 className="font-black text-lg sm:text-xl text-gray-800">Food Recommendations</h4>
+              </div>
+              {activeSections.includes('food-recs') ? <ChevronUp className="w-6 h-6 text-gray-400" /> : <ChevronDown className="w-6 h-6 text-gray-400" />}
+            </button>
+            <AnimatePresence>
+              {activeSections.includes('food-recs') && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="px-6 sm:px-8 pb-8 pt-2"
+                >
+                  {isLoadingFoodRecs ? (
+                    <div className="animate-pulse flex space-y-3 flex-col py-4">
+                      <div className="h-4 bg-gray-100 rounded w-full"></div>
+                      <div className="h-4 bg-gray-100 rounded w-5/6"></div>
+                      <div className="h-4 bg-gray-100 rounded w-4/6"></div>
+                    </div>
+                  ) : (
+                    <div className="text-base text-gray-600 leading-relaxed font-medium prose prose-sm max-w-none">
+                      <ReactMarkdown>{foodRecommendations}</ReactMarkdown>
+                    </div>
+                  )}
+                  <div className="mt-4 flex justify-between items-center">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-[0.2em] font-black">AI Curated for {analysis.breed}</div>
+                    <button 
+                      onClick={fetchFoodRecommendations}
+                      className="text-[10px] items-center gap-1 flex font-bold text-brand-orange hover:opacity-70 transition-opacity"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingFoodRecs ? 'animate-spin' : ''}`} /> Regenerate
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </section>
 
           <section className="bg-white rounded-[32px] shadow-sm overflow-hidden border border-gray-100">
             <button 
@@ -467,7 +542,7 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => onSave?.(petName || 'My Pet', { enabled: feedingEnabled, times: feedingTimes })}
+            onClick={() => onSave?.(petName || 'My Pet', { enabled: feedingEnabled, times: feedingTimes }, { foodRecommendations, nutritionTip })}
             className="w-full mt-16 bg-brand-orange text-white font-black py-6 rounded-3xl shadow-2xl shadow-orange-200 text-xl hover:bg-opacity-90 transition-all"
           >
             Save to Profiles
@@ -478,7 +553,7 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => onSave?.(petName || 'My Pet', { enabled: feedingEnabled, times: feedingTimes })}
+            onClick={() => onSave?.(petName || 'My Pet', { enabled: feedingEnabled, times: feedingTimes }, { foodRecommendations, nutritionTip })}
             className="w-full mt-8 bg-white text-brand-orange border-2 border-brand-orange font-black py-5 rounded-3xl text-lg hover:bg-brand-pastel transition-all"
           >
             Update Profile Settings

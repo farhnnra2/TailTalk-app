@@ -1,11 +1,23 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, setDoc, serverTimestamp } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfigJSON from '../../firebase-applet-config.json';
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJSON.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJSON.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJSON.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJSON.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJSON.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJSON.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigJSON.measurementId,
+};
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+
+const databaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJSON as any).firestoreDatabaseId;
+export const db = getFirestore(app, databaseId);
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -81,11 +93,25 @@ export const signInWithGoogle = async () => {
 
 // Connection test
 async function testConnection() {
+  const missingKeys = Object.entries(firebaseConfig)
+    .filter(([_, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingKeys.length > 0) {
+    console.warn(`Firebase configuration is incomplete. Missing: ${missingKeys.join(', ')}`);
+    console.info("Please set these values in the 'Settings' -> 'Secrets' menu in AI Studio.");
+    return;
+  }
+
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const testDoc = doc(db, 'test', 'connection');
+    await getDocFromServer(testDoc);
+    console.log("Firebase connection established successfully.");
   } catch (error: any) {
     if (error?.message?.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration or connection.");
+      console.error("Please check your Firebase configuration or network connection.");
+    } else {
+      console.error("Firebase connection test failed:", error);
     }
   }
 }
