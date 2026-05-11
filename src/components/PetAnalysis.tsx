@@ -22,7 +22,7 @@ interface PetAnalysisProps {
   initialName?: string;
   isExisting?: boolean;
   initialFeedingData?: { enabled: boolean, times: FeedingTimes };
-  addNotification?: (text: string) => void;
+  addNotification?: (text: string, type?: 'info' | 'reminder') => void;
 }
 
 export const PetAnalysis: React.FC<PetAnalysisProps> = ({ 
@@ -57,6 +57,26 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
   const [isLoadingTip, setIsLoadingTip] = useState(false);
   const [foodRecommendations, setFoodRecommendations] = useState(analysis.foodRecommendations || '');
   const [isLoadingFoodRecs, setIsLoadingFoodRecs] = useState(false);
+  const [currentHackIndex, setCurrentHackIndex] = useState(0);
+
+  const hacks = React.useMemo(() => {
+    if (!analysis.diyHacks) return [];
+    // Split by common markdown list markers or numbers
+    return analysis.diyHacks
+      .split(/\n(?:-|\*|\d+\.)/)
+      .map(h => h.trim())
+      .filter(h => h.length > 0);
+  }, [analysis.diyHacks]);
+
+  useEffect(() => {
+    if (hacks.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentHackIndex(prev => (prev + 1) % hacks.length);
+    }, 5000); // Rotate every 5 seconds
+    return () => clearInterval(timer);
+  }, [hacks]);
+
+  const currentHackDisplay = hacks.length > 0 ? (hacks.length > 1 ? `- ${hacks[currentHackIndex]}` : analysis.diyHacks) : '';
 
   useEffect(() => {
     if (feedingEnabled && !nutritionTip) {
@@ -129,20 +149,35 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
 
   const showNotification = (message: string) => {
     // Add to global notification list
-    addNotification?.(message);
+    addNotification?.(message, 'reminder');
 
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(message, {
-          body: 'Healthy pets are happy pets!',
-          icon: image,
-          silent: false,
-          requireInteraction: true
+    const title = 'TailTalk Reminder';
+    const options = {
+      body: message,
+      icon: image,
+      badge: '/badge.png',
+      requireInteraction: true,
+      tag: 'feeding-reminder',
+      renotify: true
+    };
+
+    if ('serviceWorker' in navigator && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.showNotification(title, options);
+        }).catch(() => {
+          // Fallback to legacy
+          new Notification(title, options);
         });
-      } catch (e) {
-        alert(message);
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            navigator.serviceWorker.ready.then(reg => reg.showNotification(title, options));
+          }
+        });
       }
     } else {
+      // Direct alert fallback if notifications aren't supported
       alert(message);
     }
   };
@@ -418,9 +453,9 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
                             <div className="h-2 bg-gray-100 rounded w-2/3"></div>
                           </div>
                         ) : (
-                          <p className="text-sm text-gray-600 italic leading-relaxed">
-                            "{nutritionTip || "Select a time to get a personalized tip for your friend."}"
-                          </p>
+                          <div className="text-sm text-gray-600 font-medium italic leading-relaxed prose prose-sm max-w-none prose-p:my-0">
+                            <ReactMarkdown>{nutritionTip || "_Select a time to get a personalized tip for your friend._"}</ReactMarkdown>
+                          </div>
                         )}
                       </div>
                     </motion.div>
@@ -442,8 +477,9 @@ export const PetAnalysis: React.FC<PetAnalysisProps> = ({
             title="TailTalk Pet Hack" 
             isOpen={activeSections.includes('hacks')}
             onToggle={() => toggleSection('hacks')}
-            content={analysis.diyHacks}
+            content={currentHackDisplay}
             icon={<Zap className="w-6 h-6 text-brand-orange" />}
+            isRotating={hacks.length > 1}
           />
 
           <section className="bg-white rounded-[32px] shadow-sm overflow-hidden border border-gray-100">
@@ -582,7 +618,7 @@ const StatCard = ({ icon, label, value, color, onClick }: { icon: React.ReactNod
   );
 };
 
-const CollapsibleSection = ({ title, isOpen, onToggle, content, icon }: { title: string, isOpen: boolean, onToggle: () => void, content: string, icon: React.ReactNode }) => (
+const CollapsibleSection = ({ title, isOpen, onToggle, content, icon, isRotating }: { title: string, isOpen: boolean, onToggle: () => void, content: string, icon: React.ReactNode, isRotating?: boolean }) => (
   <section className="bg-white rounded-[32px] shadow-sm overflow-hidden border border-gray-100">
     <button 
       onClick={onToggle}
@@ -590,21 +626,37 @@ const CollapsibleSection = ({ title, isOpen, onToggle, content, icon }: { title:
     >
       <div className="flex items-center gap-4">
         {icon}
-        <h4 className="font-black text-lg sm:text-xl text-gray-800">{title}</h4>
+        <div className="flex flex-col items-start">
+          <h4 className="font-black text-lg sm:text-xl text-gray-800">{title}</h4>
+          {isRotating && !isOpen && (
+            <motion.span 
+              key={content}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-[10px] text-brand-orange font-bold uppercase tracking-tighter"
+            >
+              Rotating Daily Tips active
+            </motion.span>
+          )}
+        </div>
       </div>
       {isOpen ? <ChevronUp className="w-6 h-6 text-gray-400" /> : <ChevronDown className="w-6 h-6 text-gray-400" />}
     </button>
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {isOpen && (
         <motion.div 
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
+          key={isRotating ? content : 'static'}
+          initial={{ height: isRotating ? 'auto' : 0, opacity: 0, x: isRotating ? 10 : 0 }}
+          animate={{ height: 'auto', opacity: 1, x: 0 }}
+          exit={{ height: isRotating ? 'auto' : 0, opacity: 0, x: isRotating ? -10 : 0 }}
           className="px-6 sm:px-8 pb-8 pt-2"
         >
           <div className="text-base text-gray-600 leading-relaxed font-medium prose prose-sm max-w-none">
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
+          {isRotating && (
+             <div className="mt-4 text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em]">Next hack coming soon...</div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

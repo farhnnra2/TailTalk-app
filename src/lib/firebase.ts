@@ -73,16 +73,27 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     
-    // Sync user to Firestore
+    // Sync user to Firestore - only update lastLogin if user already exists
+    // to avoid overwriting long photoURLs stored in Firestore that Auth can't hold
     const userRef = doc(db, 'users', user.uid);
-    await setDoc(userRef, {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      createdAt: serverTimestamp(),
-      lastLogin: serverTimestamp()
-    }, { merge: true });
+    const userDoc = await getDocFromServer(userRef).catch(() => null);
+
+    if (!userDoc || !userDoc.exists()) {
+      // New user: set everything
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp()
+      });
+    } else {
+      // Existing user: only update lastLogin to avoid overwriting long photoURLs
+      await setDoc(userRef, {
+        lastLogin: serverTimestamp()
+      }, { merge: true });
+    }
 
     return user;
   } catch (error) {
@@ -93,14 +104,20 @@ export const signInWithGoogle = async () => {
 
 // Connection test
 async function testConnection() {
-  const missingKeys = Object.entries(firebaseConfig)
-    .filter(([_, value]) => !value)
-    .map(([key]) => key);
+  const criticalKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+  const missingCritical = criticalKeys.filter(key => !(firebaseConfig as any)[key]);
 
-  if (missingKeys.length > 0) {
-    console.warn(`Firebase configuration is incomplete. Missing: ${missingKeys.join(', ')}`);
+  if (missingCritical.length > 0) {
+    console.warn(`Critical Firebase configuration missing: ${missingCritical.join(', ')}`);
     console.info("Please set these values in the 'Settings' -> 'Secrets' menu in AI Studio.");
     return;
+  }
+
+  // Check for optional but recommended keys
+  const optionalKeys = ['messagingSenderId', 'measurementId', 'storageBucket'];
+  const missingOptional = optionalKeys.filter(key => !(firebaseConfig as any)[key]);
+  if (missingOptional.length > 0) {
+    console.info(`Optional Firebase features might be limited. Missing: ${missingOptional.join(', ')}`);
   }
 
   try {

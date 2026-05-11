@@ -11,6 +11,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    match /test/connection {
+      allow get: if true;
+    }
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
@@ -31,17 +35,36 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && (
-                     incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin'])
-                     || (isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin']))
-                   );
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin', 'uid', 'email', 'createdAt'])
+      );
       
       function isValidUser(data) {
         return data.uid == userId
           && (data.email == null || (data.email is string && data.email.size() <= 256))
           && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 128))
-          && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 2048))
-          && (data.lastLogin == null || data.lastLogin != null);
+          && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000000))
+          && (data.lastLogin == null || data.lastLogin != null)
+          && (data.createdAt == null || data.createdAt != null);
+      }
+
+
+      // --- Notification Rules ---
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidNotification(incoming());
+        allow update: if isOwner(userId) && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+          || isValidNotification(incoming())
+        );
+        allow delete: if isOwner(userId);
+
+        function isValidNotification(data) {
+          return data.text is string && data.text.size() <= 1000
+            && (data.type == null || (data.type is string && data.type.size() <= 32))
+            && (data.isRead == null || data.isRead is bool)
+            && data.createdAt != null;
+        }
       }
 
       // --- Pet Profile Rules ---

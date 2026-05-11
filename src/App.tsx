@@ -4,19 +4,22 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged, User, updateProfile } from 'firebase/auth';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { auth, db, signInWithGoogle } from './lib/firebase';
 import { Splash } from './components/Splash';
 import { Dashboard } from './components/Dashboard';
 import { PetAnalysis } from './components/PetAnalysis';
 import { CameraModal } from './components/CameraModal';
 import { UserProfile } from './components/UserProfile';
+import { NotificationPopup } from './components/NotificationPopup';
+import { LogoutAnimation } from './components/LogoutAnimation';
 import { PetProfile, AnalysisResult, AppNotification, UserProfile as UserProfileType } from './types';
 import { analyzePetPhoto } from './services/geminiService';
 import { resizeImage } from './lib/imageResizer';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { orderBy, limit } from 'firebase/firestore';
 
 type Screen = 'splash' | 'dashboard' | 'analysis' | 'profile';
 
@@ -28,9 +31,9 @@ export default function App() {
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<{ image: string, result: AnalysisResult, id?: string, name?: string } | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>([
-    { id: '1', text: "Welcome to TailTalk! Scan your pet to get started.", time: "Joined", isRead: false }
-  ]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [activePopup, setActivePopup] = useState<AppNotification | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFirestoreError = (error: unknown, operation: string, path: string | null) => {
@@ -45,7 +48,7 @@ export default function App() {
       path
     };
     console.error('Firestore Error: ', JSON.stringify(errInfo));
-    return new Error(JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
   };
 
   useEffect(() => {
@@ -74,6 +77,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Sync User Profile from Firestore (for extra metadata like photoURL which might be too long for Auth)
+    if (!user?.uid) return;
+
+    const userRef = doc(db, `users/${user.uid}`);
+    const unsubscribe = onSnapshot(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setUser(prev => prev ? {
+          ...prev,
+          displayName: data.displayName || prev.displayName,
+          photoURL: data.photoURL || prev.photoURL
+        } : null);
+      }
+    }, (error) => {
+      console.warn("User profile sync failed:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
     // Pets Listener (only if user is logged in)
     if (!user) {
       setPets([]);
@@ -98,6 +122,34 @@ export default function App() {
     return () => unsubscribePets();
   }, [user]);
 
+  useEffect(() => {
+    // Notifications Listener
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+
+    const path = `users/${user.uid}/notifications`;
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(50));
+    
+    const unsubscribeNotifs = onSnapshot(q, (snapshot) => {
+      const notifs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          time: data.createdAt?.toDate ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: 'numeric' }).format(data.createdAt.toDate()) : 'Now'
+        } as AppNotification;
+      });
+      setNotifications(notifs);
+    }, (error) => {
+      console.error("Notifications listener failed:", error);
+      handleFirestoreError(error, 'LIST', path);
+    });
+
+    return () => unsubscribeNotifs();
+  }, [user]);
+
   const handleGetStarted = async () => {
     try {
       setIsLoading(true);
@@ -109,14 +161,86 @@ export default function App() {
     }
   };
 
-  const addNotification = (text: string) => {
-    const newNotif: AppNotification = {
-      id: Math.random().toString(36).substr(2, 9),
-      text,
-      time: "Now",
-      isRead: false
-    };
-    setNotifications(prev => [newNotif, ...prev]);
+  const addNotification = async (text: string, type: 'info' | 'reminder' = 'info') => {
+    if (!user) return;
+    
+    const path = `users/${user.uid}/notifications`;
+    try {
+      const docRef = await addDoc(collection(db, path), {
+        text,
+        type,
+        isRead: false,
+        createdAt: serverTimestamp()
+      });
+
+      // Show popup for reminders or important info
+      if (type === 'reminder') {
+        setActivePopup({ id: docRef.id, text, type, time: 'Now' });
+      }
+    } catch (error) {
+      console.error("Failed to add notification", error);
+      handleFirestoreError(error, 'WRITE', path);
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    if (!user) return;
+    const path = `users/${user.uid}/notifications/${id}`;
+    try {
+      await deleteDoc(doc(db, path));
+    } catch (error) {
+      console.error("Delete notification failed", error);
+      handleFirestoreError(error, 'DELETE', path);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!user) return;
+    const path = `users/${user.uid}/notifications`;
+    // For simplicity, we loop and delete. In a real app we'd use a batch.
+    const promises = notifications.map(n => deleteDoc(doc(db, `${path}/${n.id}`)));
+    try {
+      await Promise.all(promises);
+    } catch (error) {
+      console.error("Clear notifications failed", error);
+      handleFirestoreError(error, 'DELETE', path);
+    }
+  };
+
+  const handleUpdateProfile = async (updates: { displayName?: string, photoURL?: string }) => {
+    if (!auth.currentUser || !user) return;
+
+    try {
+      // 1. Update Auth Profile (only displayName if photoURL is a long base64 string)
+      // Firebase Auth photoURL has a strict limit (approx 2KB).
+      const authUpdates: any = { displayName: updates.displayName };
+      if (updates.photoURL && updates.photoURL.length < 2000) {
+        authUpdates.photoURL = updates.photoURL;
+      }
+
+      await updateProfile(auth.currentUser, authUpdates);
+
+      // 2. Update Firestore User Document (Always store the full photo here)
+      const userRef = doc(db, `users/${user.uid}`);
+      await setDoc(userRef, {
+        ...updates,
+        uid: user.uid,
+        email: user.email,
+        lastLogin: serverTimestamp()
+      }, { merge: true });
+
+      // 3. Update local state
+      setUser({
+        ...user,
+        ...updates
+      });
+
+      addNotification("Profile updated successfully!");
+    } catch (error) {
+      console.error("Profile update failed", error);
+      handleFirestoreError(error, 'WRITE', `users/${user.uid}`);
+      throw error;
+    }
   };
 
   const processImage = async (rawBase64: string) => {
@@ -204,10 +328,16 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
+  };
+
+  const finalLogout = async () => {
     try {
       await auth.signOut();
+      setIsLoggingOut(false);
     } catch (error) {
       console.error("Logout failed", error);
+      setIsLoggingOut(false);
     }
   };
 
@@ -238,6 +368,8 @@ export default function App() {
               onScanPhoto={() => fileInputRef.current?.click()} 
               onOpenCamera={() => setShowCamera(true)}
               onOpenProfile={() => setScreen('profile')}
+              onDeleteNotification={deleteNotification}
+              onClearAllNotifications={clearAllNotifications}
               onSelectPet={(pet) => {
                 setCurrentAnalysis({ 
                   id: pet.id,
@@ -301,6 +433,7 @@ export default function App() {
               pets={pets}
               onBack={() => setScreen('dashboard')}
               onLogout={handleLogout}
+              onUpdateProfile={handleUpdateProfile}
             />
           </motion.div>
         )}
@@ -332,6 +465,21 @@ export default function App() {
           <p className="text-gray-500 text-sm max-w-xs mx-auto">TailTalk AI is identifying breeds, estimating age, and preparing personalized care tips for your friend.</p>
         </div>
       )}
+
+      {/* Floating Animated In-App Popups */}
+      <NotificationPopup 
+        notification={activePopup} 
+        onClose={() => setActivePopup(null)} 
+      />
+
+      <AnimatePresence>
+        {isLoggingOut && (
+          <LogoutAnimation 
+            pets={pets} 
+            onComplete={finalLogout} 
+          />
+        )}
+      </AnimatePresence>
       </div>
     </div>
   );

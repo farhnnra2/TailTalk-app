@@ -8,6 +8,8 @@ export interface AppNotification {
   text: string;
   time: string;
   isRead?: boolean;
+  type?: 'info' | 'reminder';
+  createdAt?: any;
 }
 
 export type PetCategory = 'All' | 'Cat' | 'Dog' | 'Bird' | 'Other';

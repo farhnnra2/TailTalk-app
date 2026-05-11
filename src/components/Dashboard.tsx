@@ -13,11 +13,13 @@ interface DashboardProps {
   onOpenCamera: () => void;
   onSelectPet: (pet: PetProfile) => void;
   onOpenProfile: () => void;
+  onDeleteNotification: (id: string) => void;
+  onClearAllNotifications: () => void;
 }
 
 const categories: PetCategory[] = ['All', 'Cat', 'Dog', 'Bird', 'Other'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications, onScanPhoto, onOpenCamera, onSelectPet, onOpenProfile }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications, onScanPhoto, onOpenCamera, onSelectPet, onOpenProfile, onDeleteNotification, onClearAllNotifications }) => {
   const [selectedCategory, setSelectedCategory] = useState<PetCategory>('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -162,6 +164,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
             <h2 className="font-bold text-sm sm:text-xl truncate max-w-[120px] sm:max-w-none">
               {user?.displayName || 'Pet Parent'}
             </h2>
+            {pets.length > 0 && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[9px] font-black text-white bg-brand-orange px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm shadow-orange-100">
+                  {pets.length} {pets.length === 1 ? 'Pet' : 'Pets'} Total
+                </span>
+              </div>
+            )}
           </div>
         </button>
         <div className="flex gap-2">
@@ -189,17 +198,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
               exit={{ opacity: 0, scale: 0.95, y: -10 }}
               className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-white rounded-3xl shadow-2xl border border-gray-100 z-50 p-6"
             >
-              <h3 className="font-black text-lg mb-4 text-gray-800">Notifications</h3>
-              <div className="space-y-4">
-                {notifications.map(n => (
-                  <div key={n.id} className="flex gap-3 items-start pb-4 border-b border-gray-50 last:border-0 last:pb-0">
-                    <div className="w-2 h-2 bg-brand-orange rounded-full mt-1.5 shrink-0" />
-                    <div>
-                      <p className="text-sm text-gray-700 leading-tight mb-1">{n.text}</p>
-                      <span className="text-[10px] font-bold text-gray-300 uppercase">{n.time}</span>
-                    </div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-black text-lg text-gray-800">History</h3>
+                {notifications.length > 0 && (
+                  <button 
+                    onClick={onClearAllNotifications}
+                    className="text-[10px] font-black uppercase text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+              <div className="space-y-4 max-h-[350px] overflow-y-auto no-scrollbar pr-1">
+                {notifications.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Bell className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Inbox Empty</p>
                   </div>
-                ))}
+                ) : (
+                  <AnimatePresence initial={false}>
+                    {notifications.map(n => (
+                      <motion.div 
+                        key={n.id} 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        className="flex gap-3 items-start group relative"
+                      >
+                        <div className={cn(
+                          "w-2 h-2 rounded-full mt-1.5 shrink-0",
+                          n.type === 'reminder' ? "bg-brand-orange" : "bg-blue-400"
+                        )} />
+                        <div className="flex-1 pr-6">
+                          <p className="text-sm text-gray-700 font-medium leading-[1.3] mb-1">{n.text}</p>
+                          <span className="text-[10px] font-black text-gray-300 uppercase tracking-tighter">{n.time}</span>
+                        </div>
+                        <button 
+                          onClick={() => onDeleteNotification(n.id)}
+                          className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-300 hover:text-red-500"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                )}
               </div>
             </motion.div>
           )}
@@ -229,7 +272,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
         <section>
           <div className="flex justify-between items-center mb-6">
             <h4 className="font-bold text-lg sm:text-2xl">Categories</h4>
-            <button className="text-gray-400 text-sm hover:text-brand-orange transition-colors">See All</button>
           </div>
           <div className="flex gap-4 sm:gap-8 overflow-x-auto sm:overflow-visible sm:flex-wrap pb-4 px-2 -mx-2 no-scrollbar sm:justify-between lg:justify-start">
             {categories.map((cat) => (
