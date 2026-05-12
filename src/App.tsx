@@ -183,6 +183,30 @@ export default function App() {
     }
   };
 
+  const markAsRead = async (id: string) => {
+    if (!user) return;
+    const path = `users/${user.uid}/notifications/${id}`;
+    try {
+      await updateDoc(doc(db, path), { isRead: true });
+    } catch (error) {
+      console.error("Mark notification as read failed", error);
+    }
+  };
+
+  const markNotificationsAsRead = async () => {
+    if (!user) return;
+    const unread = notifications.filter(n => !n.isRead);
+    if (unread.length === 0) return;
+
+    const path = `users/${user.uid}/notifications`;
+    const promises = unread.map(n => updateDoc(doc(db, `${path}/${n.id}`), { isRead: true }));
+    try {
+      await Promise.all(promises);
+    } catch (error) {
+      console.error("Mark notifications as read failed", error);
+    }
+  };
+
   const deleteNotification = async (id: string) => {
     if (!user) return;
     const path = `users/${user.uid}/notifications/${id}`;
@@ -370,6 +394,7 @@ export default function App() {
               onOpenProfile={() => setScreen('profile')}
               onDeleteNotification={deleteNotification}
               onClearAllNotifications={clearAllNotifications}
+              onMarkNotificationsRead={markNotificationsAsRead}
               onSelectPet={(pet) => {
                 setCurrentAnalysis({ 
                   id: pet.id,
@@ -469,7 +494,10 @@ export default function App() {
       {/* Floating Animated In-App Popups */}
       <NotificationPopup 
         notification={activePopup} 
-        onClose={() => setActivePopup(null)} 
+        onClose={(id) => {
+          setActivePopup(null);
+          markAsRead(id);
+        }} 
       />
 
       <AnimatePresence>

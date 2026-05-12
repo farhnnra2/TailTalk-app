@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Bell, Camera, ChevronRight, Filter, RefreshCw, X, User as UserIcon } from 'lucide-react';
+import { Search, Bell, Camera, ChevronRight, Filter, RefreshCw, X, User as UserIcon, Sparkles } from 'lucide-react';
 import { PetProfile, PetCategory, AppNotification, UserProfile } from '../types';
 import { PET_HACKS } from '../constants';
 import { cn } from '../lib/utils';
@@ -15,22 +15,30 @@ interface DashboardProps {
   onOpenProfile: () => void;
   onDeleteNotification: (id: string) => void;
   onClearAllNotifications: () => void;
+  onMarkNotificationsRead: () => void;
 }
 
 const categories: PetCategory[] = ['All', 'Cat', 'Dog', 'Bird', 'Other'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications, onScanPhoto, onOpenCamera, onSelectPet, onOpenProfile, onDeleteNotification, onClearAllNotifications }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications, onScanPhoto, onOpenCamera, onSelectPet, onOpenProfile, onDeleteNotification, onClearAllNotifications, onMarkNotificationsRead }) => {
   const [selectedCategory, setSelectedCategory] = useState<PetCategory>('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [dailyHack, setDailyHack] = useState(PET_HACKS[0]);
 
+  const hasUnread = notifications.some(n => !n.isRead);
+
   useEffect(() => {
-    // Select hack based on date for daily rotation
-    const today = new Date();
-    const index = (today.getFullYear() + today.getMonth() + today.getDate()) % PET_HACKS.length;
-    setDailyHack(PET_HACKS[index]);
+    const interval = setInterval(() => {
+      setDailyHack((current) => {
+        const currentIndex = PET_HACKS.findIndex(h => h.id === current.id);
+        const nextIndex = (currentIndex + 1) % PET_HACKS.length;
+        return PET_HACKS[nextIndex];
+      });
+    }, 20000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleShuffleHack = () => {
@@ -181,11 +189,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
             <Search className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
           </button>
           <button 
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => {
+              const nextState = !showNotifications;
+              setShowNotifications(nextState);
+              if (nextState) {
+                onMarkNotificationsRead();
+              }
+            }}
             className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors relative"
           >
             <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
-            <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+            {hasUnread && (
+              <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+            )}
           </button>
         </div>
 
@@ -332,8 +348,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
         <section>
           <h4 className="font-bold text-lg sm:text-2xl mb-6">Your Pet Profiles</h4>
           {pets.length === 0 ? (
-            <div className="bg-white p-12 rounded-[40px] text-center shadow-sm border border-gray-100">
-              <p className="text-gray-400 text-lg">No pet profiles yet. <br/> Start by scanning a photo!</p>
+            <div className="bg-white p-12 rounded-[40px] text-center shadow-sm border border-orange-50/50 flex flex-col items-center">
+              <div className="w-24 h-24 bg-brand-cream rounded-full flex items-center justify-center mb-6 relative">
+                <Camera className="w-10 h-10 text-brand-orange animate-bounce" />
+                <div className="absolute -top-1 -right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
+                  <Sparkles className="w-4 h-4 text-brand-orange" />
+                </div>
+              </div>
+              <h5 className="font-black text-xl text-gray-900 mb-2">No pets yet?</h5>
+              <p className="text-gray-400 text-sm font-medium max-w-[220px] mx-auto">
+                Start by scanning their first photo!
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 lg:gap-8">
@@ -364,7 +389,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
               onClick={handleShuffleHack}
               className="text-gray-400 text-xs sm:text-sm hover:text-brand-orange transition-colors flex items-center gap-1 font-bold bg-white px-3 py-1.5 rounded-full shadow-sm hover:shadow-md"
             >
-              <RefreshCw className="w-3 h-3" /> Shuffle for Test
+              <RefreshCw className="w-3 h-3" /> Shuffle
             </button>
           </div>
           <motion.div 
@@ -402,7 +427,7 @@ const PawPrintIcon = ({ category }: { category: PetCategory }) => {
     case 'Cat': return <span>🐱</span>;
     case 'Dog': return <span>🐶</span>;
     case 'Bird': return <span>🐦</span>;
-    case 'Other': return <span>🦜</span>;
+    case 'Other': return <span>🐾</span>;
     default: return <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />;
   }
 };

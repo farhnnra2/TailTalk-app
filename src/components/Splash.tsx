@@ -55,21 +55,39 @@ export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
           Get Started
         </motion.button>
         
-        <button className="text-gray-400 text-sm sm:text-base font-bold hover:text-brand-orange transition-colors">
-          Already have an account? <span className="text-brand-orange">Sign in</span>
-        </button>
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-gray-400 text-sm sm:text-base font-bold text-center px-6 leading-relaxed"
+        >
+          Welcome! Great paw-renting starts here. <br/>
+          <span className="text-brand-orange/60 text-[10px] uppercase tracking-[0.2em] mt-2 block">Powered by TailTalk AI</span>
+        </motion.p>
       </div>
       
-      {/* Random pet avatars */}
-      <div className="absolute top-20 right-10 lg:right-[20%] w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-4 border-white shadow-xl">
-        <img src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=2043&auto=format&fit=crop" alt="Cat" className="w-full h-full object-cover" />
-      </div>
-      <div className="absolute top-48 left-10 lg:left-[25%] w-14 h-14 sm:w-20 sm:h-20 rounded-full overflow-hidden border-4 border-white shadow-xl">
-        <img src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=1974&auto=format&fit=crop" alt="Dog" className="w-full h-full object-cover" />
-      </div>
-      <div className="absolute bottom-60 right-20 lg:right-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full overflow-hidden border-4 border-white shadow-xl">
-        <img src="https://images.unsplash.com/photo-1522926193341-e9fed198d4ad?q=80&w=2072&auto=format&fit=crop" alt="Bird" className="w-full h-full object-cover" />
-      </div>
+      {/* Floating Paw Icons */}
+      <motion.div 
+        animate={{ y: [0, -10, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute top-20 right-10 lg:right-[20%] w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center border-4 border-orange-50 shadow-xl"
+      >
+        <PawPrint className="text-brand-orange w-6 h-6 sm:w-8 sm:h-8" />
+      </motion.div>
+      <motion.div 
+        animate={{ y: [0, 15, 0] }}
+        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+        className="absolute top-48 left-10 lg:left-[25%] w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-orange-100 flex items-center justify-center border-4 border-white shadow-xl"
+      >
+        <PawPrint className="text-brand-orange w-7 h-7 sm:w-10 sm:h-10 opacity-60" />
+      </motion.div>
+      <motion.div 
+        animate={{ y: [0, -20, 0] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+        className="absolute bottom-60 right-20 lg:right-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-brand-orange/10 flex items-center justify-center border-4 border-white shadow-xl"
+      >
+        <PawPrint className="text-brand-orange w-8 h-8 sm:w-12 sm:h-12 opacity-40" />
+      </motion.div>
     </div>
   );
 };
