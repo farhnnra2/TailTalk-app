@@ -71,40 +71,42 @@ service cloud.firestore {
       match /pets/{petId} {
         allow get: if isOwner(userId);
         allow list: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidPet(incoming());
+        allow create: if isOwner(userId);
         allow update: if isOwner(userId)
                        && incoming().ownerId == userId
                        && (
-                         // Action: Update Details
-                         incoming().diff(existing()).affectedKeys().hasAll(['updatedAt'])
-                         && incoming().diff(existing()).affectedKeys().hasAny(['name', 'category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'updatedAt', 'feedingRemindersEnabled', 'feedingTimes', 'foodRecommendations', 'nutritionTip'])
-                         && (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'updatedAt', 'feedingRemindersEnabled', 'feedingTimes', 'foodRecommendations', 'nutritionTip']))
+                         incoming().diff(existing()).affectedKeys().hasAny(['name', 'category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'updatedAt', 'lastHealthCheck', 'feedingRemindersEnabled', 'feedingTimes', 'foodRecommendations', 'nutritionTip', 'foodSafety'])
                        )
                        && (
-                         // Schema Check
-                         (incoming().name == null || (incoming().name is string && incoming().name.size() <= 128))
-                         && (incoming().updatedAt != null)
+                         incoming().name == null || (incoming().name is string && incoming().name.size() <= 256)
                        );
         allow delete: if isOwner(userId);
 
         function isValidPet(data) {
           // Strict validation of the pet document structure
-          return data.ownerId == request.auth.uid
-            && data.name is string && data.name.size() > 0 && data.name.size() <= 128
-            && data.imageUrl is string && data.imageUrl.size() <= 2000000 
-            && data.category is string && data.category.size() <= 32
-            && data.breed is string && data.breed.size() <= 256
-            && (data.ageEstimation == null || (data.ageEstimation is string && data.ageEstimation.size() <= 128))
-            && (data.energyLevel == null || (data.energyLevel is string && data.energyLevel.size() <= 128))
-            && (data.carePlan == null || (data.carePlan is string && data.carePlan.size() <= 20000))
-            && (data.diyHacks == null || (data.diyHacks is string && data.diyHacks.size() <= 20000))
-            && (data.foodRecommendations == null || (data.foodRecommendations is string && data.foodRecommendations.size() <= 20000))
-            && (data.nutritionTip == null || (data.nutritionTip is string && data.nutritionTip.size() <= 5000))
+          return data.ownerId == userId
+            && data.name is string && data.name.size() > 0 && data.name.size() <= 256
+            && (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 10000000))
+            && (data.category == null || (data.category is string && data.category.size() <= 64))
+            && (data.breed == null || (data.breed is string && data.breed.size() <= 512))
+            && (data.ageEstimation == null || (data.ageEstimation is string && data.ageEstimation.size() <= 256))
+            && (data.energyLevel == null || (data.energyLevel is string && data.energyLevel.size() <= 256))
+            && (data.carePlan == null || (data.carePlan is string && data.carePlan.size() <= 30000))
+            && (data.diyHacks == null || (data.diyHacks is string && data.diyHacks.size() <= 30000))
+            && (data.foodRecommendations == null || (data.foodRecommendations is string && data.foodRecommendations.size() <= 30000))
+            && (data.nutritionTip == null || (data.nutritionTip is string && data.nutritionTip.size() <= 10000))
+            && (data.foodSafety == null || (data.foodSafety is string && data.foodSafety.size() <= 20000))
             && (data.feedingRemindersEnabled == null || data.feedingRemindersEnabled is bool)
             && (data.feedingTimes == null || data.feedingTimes is map)
+            && (data.lastHealthCheck == null || data.lastHealthCheck != null)
             && data.createdAt != null
             && data.updatedAt != null;
         }
+      }
+
+      // --- Health Log Rules ---
+      match /pets/{petId}/healthLogs/{logId} {
+        allow get, list, create, delete: if isOwner(userId);
       }
     }
   }

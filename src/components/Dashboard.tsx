@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Bell, Camera, ChevronRight, Filter, RefreshCw, X, User as UserIcon, Sparkles } from 'lucide-react';
-import { PetProfile, PetCategory, AppNotification, UserProfile } from '../types';
+import { Search, Bell, Camera, ChevronRight, Filter, RefreshCw, X, User as UserIcon, Sparkles, Stethoscope } from 'lucide-react';
+import { PetProfile, PetCategory, AppNotification, UserProfile as UserProfileType } from '../types';
 import { PET_HACKS } from '../constants';
 import { cn } from '../lib/utils';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface DashboardProps {
-  user: UserProfile | null;
+  user: UserProfileType | null;
   pets: PetProfile[];
   notifications: AppNotification[];
   onScanPhoto: () => void;
@@ -18,37 +19,50 @@ interface DashboardProps {
   onMarkNotificationsRead: () => void;
 }
 
-const categories: PetCategory[] = ['All', 'Cat', 'Dog', 'Bird', 'Other'];
-
 export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications, onScanPhoto, onOpenCamera, onSelectPet, onOpenProfile, onDeleteNotification, onClearAllNotifications, onMarkNotificationsRead }) => {
+  const { language, setLanguage, t } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState<PetCategory>('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [dailyHack, setDailyHack] = useState(PET_HACKS[0]);
+  const [dailyHack, setDailyHack] = useState(t.hacks[0]);
+
+  const categories: { id: PetCategory; label: string }[] = [
+    { id: 'All', label: t.dashboard.categoriesList.All },
+    { id: 'Cat', label: t.dashboard.categoriesList.Cat },
+    { id: 'Dog', label: t.dashboard.categoriesList.Dog },
+    { id: 'Bird', label: t.dashboard.categoriesList.Bird },
+    { id: 'Other', label: t.dashboard.categoriesList.Other }
+  ];
 
   const hasUnread = notifications.some(n => !n.isRead);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setDailyHack((current) => {
-        const currentIndex = PET_HACKS.findIndex(h => h.id === current.id);
-        const nextIndex = (currentIndex + 1) % PET_HACKS.length;
-        return PET_HACKS[nextIndex];
+        const currentIndex = t.hacks.findIndex(h => h.id === current.id);
+        const nextIndex = (currentIndex + 1) % t.hacks.length;
+        return t.hacks[nextIndex];
       });
     }, 20000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [t.hacks]);
 
   const handleShuffleHack = () => {
-    const currentIndex = PET_HACKS.findIndex(h => h.id === dailyHack.id);
-    let nextIndex = Math.floor(Math.random() * PET_HACKS.length);
+    const currentIndex = t.hacks.findIndex(h => h.id === dailyHack.id);
+    let nextIndex = Math.floor(Math.random() * t.hacks.length);
     if (nextIndex === currentIndex) {
-      nextIndex = (nextIndex + 1) % PET_HACKS.length;
+      nextIndex = (nextIndex + 1) % t.hacks.length;
     }
-    setDailyHack(PET_HACKS[nextIndex]);
+    setDailyHack(t.hacks[nextIndex]);
   };
+
+  useEffect(() => {
+    // Sync daily hack content when language changes
+    const current = t.hacks.find(h => h.id === dailyHack.id) || t.hacks[0];
+    setDailyHack(current);
+  }, [t.hacks]);
 
   const filteredPets = selectedCategory === 'All' 
     ? pets 
@@ -61,7 +75,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
 
   const handleWebSearch = () => {
     if (!searchQuery) return;
-    window.open(`https://www.google.com/search?q=pet+care+tips+${encodeURIComponent(searchQuery)}`, '_blank');
+    const queryBase = language === 'id' ? 'tips perawatan hewan' : 'pet care tips';
+    window.open(`https://www.google.com/search?q=${queryBase}+${encodeURIComponent(searchQuery)}`, '_blank');
   };
 
   return (
@@ -77,7 +92,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
           >
             <div className="max-w-3xl mx-auto">
               <div className="flex justify-between items-center mb-12">
-                <h3 className="font-black text-3xl text-gray-900">Search</h3>
+                <h3 className="font-black text-3xl text-gray-900">{t.dashboard.searchTitle}</h3>
                 <button 
                   onClick={() => {
                     setIsSearchOpen(false);
@@ -96,7 +111,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
                   type="text" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Seach your pets or pet hacks..."
+                  placeholder={t.dashboard.searchPlaceholder}
                   className="w-full bg-white border-2 border-brand-orange/10 focus:border-brand-orange rounded-[32px] py-6 pl-16 pr-8 text-xl font-bold shadow-lg shadow-orange-100/50 outline-none transition-all"
                 />
               </div>
@@ -106,7 +121,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
                   {/* Results: Your Pets */}
                   {searchedPets.length > 0 && (
                     <section>
-                      <h4 className="font-bold text-lg text-gray-400 mb-6 uppercase tracking-widest">Your Pets</h4>
+                      <h4 className="font-bold text-lg text-gray-400 mb-6 uppercase tracking-widest">{t.profileList.myPets}</h4>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         {searchedPets.map(pet => (
                           <div 
@@ -131,14 +146,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
                   {/* Results: Web Suggestion */}
                   <section className="bg-brand-orange p-8 rounded-[40px] shadow-xl shadow-orange-100 flex flex-col sm:flex-row items-center justify-between gap-6">
                     <div>
-                      <h4 className="text-white font-black text-xl mb-2">Search TailTalk Web</h4>
-                      <p className="text-white/80 text-sm">Find professional advice and global hacks for "{searchQuery}"</p>
+                      <h4 className="text-white font-black text-xl mb-2">{t.dashboard.webSearchTitle}</h4>
+                      <p className="text-white/80 text-sm">{t.dashboard.webSearchSubtitle.replace('{query}', searchQuery)}</p>
                     </div>
                     <button 
                       onClick={handleWebSearch}
                       className="bg-white text-brand-orange px-8 py-3 rounded-full font-black text-sm hover:scale-105 transition-all w-full sm:w-auto"
                     >
-                      Instant Search
+                      {t.dashboard.instantSearch}
                     </button>
                   </section>
                 </div>
@@ -147,7 +162,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
               {searchQuery === '' && (
                 <div className="text-center py-20 opacity-30">
                   <Search className="w-16 h-16 mx-auto mb-4" />
-                  <p className="font-bold text-xl uppercase tracking-widest">Type to start scanning...</p>
+                  <p className="font-bold text-xl uppercase tracking-widest">{t.dashboard.typeToSearch}</p>
                 </div>
               )}
             </div>
@@ -168,20 +183,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
             )}
           </div>
           <div>
-            <p className="text-gray-400 text-[10px] sm:text-xs">Welcome back 👋</p>
+            <p className="text-gray-400 text-[10px] sm:text-xs">{t.dashboard.welcomeBack} 👋</p>
             <h2 className="font-bold text-sm sm:text-xl truncate max-w-[120px] sm:max-w-none">
-              {user?.displayName || 'Pet Parent'}
+              {user?.displayName || t.dashboard.petParent}
             </h2>
             {pets.length > 0 && (
               <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-[9px] font-black text-white bg-brand-orange px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm shadow-orange-100">
-                  {pets.length} {pets.length === 1 ? 'Pet' : 'Pets'} Total
+                  {t.dashboard.totalPets.replace('{count}', pets.length.toString())}
                 </span>
               </div>
             )}
           </div>
         </button>
         <div className="flex gap-2">
+          {/* Language Toggle */}
+          <div className="bg-white rounded-full p-1 shadow-sm flex gap-1 mr-1">
+            <button 
+              onClick={(e) => { e.stopPropagation(); setLanguage('id'); }}
+              className={cn(
+                "px-2 py-1 rounded-full text-[10px] font-black transition-all",
+                language === 'id' ? "bg-brand-orange text-white" : "text-gray-400 hover:text-gray-600"
+              )}
+            >
+              ID
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setLanguage('en'); }}
+              className={cn(
+                "px-2 py-1 rounded-full text-[10px] font-black transition-all",
+                language === 'en' ? "bg-brand-orange text-white" : "text-gray-400 hover:text-gray-600"
+              )}
+            >
+              EN
+            </button>
+          </div>
           <button 
             onClick={() => setIsSearchOpen(true)}
             className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors"
@@ -215,13 +251,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
               className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-white rounded-3xl shadow-2xl border border-gray-100 z-50 p-6"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="font-black text-lg text-gray-800">History</h3>
+                <h3 className="font-black text-lg text-gray-800">{t.dashboard.history}</h3>
                 {notifications.length > 0 && (
                   <button 
                     onClick={onClearAllNotifications}
                     className="text-[10px] font-black uppercase text-gray-400 hover:text-red-500 transition-colors"
                   >
-                    Clear All
+                    {t.dashboard.clearAll}
                   </button>
                 )}
               </div>
@@ -229,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
                 {notifications.length === 0 ? (
                   <div className="text-center py-8">
                     <Bell className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Inbox Empty</p>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t.dashboard.inboxEmpty}</p>
                   </div>
                 ) : (
                   <AnimatePresence initial={false}>
@@ -268,9 +304,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
       {/* Hero Banner */}
       <div className="relative w-full max-w-5xl mx-auto h-40 sm:h-56 bg-brand-orange rounded-[40px] overflow-hidden mb-8 lg:mb-12 flex items-center px-6 sm:px-12 shadow-xl shadow-orange-100">
         <div className="z-10 w-2/3 lg:w-1/2">
-          <h3 className="text-white text-xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-4">40% Off on Pet Products</h3>
+          <h3 className="text-white text-xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-4">{t.dashboard.discountBanner}</h3>
           <button className="bg-white text-brand-orange px-4 py-2 sm:px-6 sm:py-3 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1 hover:bg-opacity-90 transition-all">
-            Shop Now <ChevronRight className="w-4 h-4" />
+            {t.dashboard.shopNow} <ChevronRight className="w-4 h-4" />
           </button>
         </div>
         <div className="absolute right-0 bottom-0 w-1/3 sm:w-1/2 h-full">
@@ -287,25 +323,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
         {/* Categories */}
         <section>
           <div className="flex justify-between items-center mb-6">
-            <h4 className="font-bold text-lg sm:text-2xl">Categories</h4>
+            <h4 className="font-bold text-lg sm:text-2xl">{t.dashboard.categories}</h4>
           </div>
           <div className="flex gap-4 sm:gap-8 overflow-x-auto sm:overflow-visible sm:flex-wrap pb-4 px-2 -mx-2 no-scrollbar sm:justify-between lg:justify-start">
             {categories.map((cat) => (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
                 className={cn(
                   "flex flex-col items-center gap-2 transition-all min-w-[70px] py-1",
-                  selectedCategory === cat ? "opacity-100 scale-105" : "opacity-60 hover:opacity-80"
+                  selectedCategory === cat.id ? "opacity-100 scale-105" : "opacity-60 hover:opacity-80"
                 )}
               >
                 <div className={cn(
                   "w-14 h-14 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-md transition-all",
-                  selectedCategory === cat ? "bg-brand-orange text-white ring-4 ring-orange-100" : "bg-white text-gray-600"
+                  selectedCategory === cat.id ? "bg-brand-orange text-white ring-4 ring-orange-100" : "bg-white text-gray-600"
                 )}>
-                  <span className="text-xl sm:text-3xl"><PawPrintIcon category={cat} /></span>
+                  <span className="text-xl sm:text-3xl"><PawPrintIcon category={cat.id} /></span>
                 </div>
-                <span className="text-[10px] sm:text-sm font-bold">{cat}</span>
+                <span className="text-[10px] sm:text-sm font-bold">{cat.label}</span>
               </button>
             ))}
           </div>
@@ -323,8 +359,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
               <ChevronRight className="text-white w-8 h-8 rotate-90" />
             </div>
             <div className="text-center">
-              <span className="font-black text-xl text-brand-orange block leading-tight">Upload Photo</span>
-              <p className="text-gray-500 text-xs mt-1">Select from gallery</p>
+              <span className="font-black text-xl text-brand-orange block leading-tight">{t.dashboard.uploadPhoto}</span>
+              <p className="text-gray-500 text-xs mt-1">{t.dashboard.fromGallery}</p>
             </div>
           </motion.button>
 
@@ -338,15 +374,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
               <Camera className="text-brand-orange w-8 h-8" />
             </div>
             <div className="text-center">
-              <span className="font-black text-xl text-white block leading-tight">Scan with Camera</span>
-              <p className="text-white/70 text-xs mt-1">Capture pet live</p>
+              <span className="font-black text-xl text-white block leading-tight">{t.dashboard.scanCamera}</span>
+              <p className="text-white/70 text-xs mt-1">{t.dashboard.captureLive}</p>
             </div>
           </motion.button>
         </div>
 
         {/* Pet Profiles */}
         <section>
-          <h4 className="font-bold text-lg sm:text-2xl mb-6">Your Pet Profiles</h4>
+          <h4 className="font-bold text-lg sm:text-2xl mb-6">{t.dashboard.yourProfiles}</h4>
           {pets.length === 0 ? (
             <div className="bg-white p-12 rounded-[40px] text-center shadow-sm border border-orange-50/50 flex flex-col items-center">
               <div className="w-24 h-24 bg-brand-cream rounded-full flex items-center justify-center mb-6 relative">
@@ -355,9 +391,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
                   <Sparkles className="w-4 h-4 text-brand-orange" />
                 </div>
               </div>
-              <h5 className="font-black text-xl text-gray-900 mb-2">No pets yet?</h5>
+              <h5 className="font-black text-xl text-gray-900 mb-2">{t.dashboard.noPetsTitle}</h5>
               <p className="text-gray-400 text-sm font-medium max-w-[220px] mx-auto">
-                Start by scanning their first photo!
+                {t.dashboard.noPetsSubtitle}
               </p>
             </div>
           ) : (
@@ -374,7 +410,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
                     <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-brand-orange">{pet.category}</div>
                   </div>
                   <h5 className="font-extrabold text-base text-gray-800 mb-1">{pet.name}</h5>
-                  <p className="text-gray-400 text-xs font-medium">{pet.breed}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-gray-400 text-xs font-medium">{pet.breed}</p>
+                    {pet.lastHealthCheck && (
+                      <div className="flex items-center gap-1 group-hover:bg-brand-orange/10 px-2 py-0.5 rounded-full transition-colors">
+                        <Stethoscope className="w-3 h-3 text-brand-orange" />
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -384,12 +427,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, pets, notifications,
         {/* AI Care Hacks */}
         <section>
           <div className="flex justify-between items-center mb-6">
-            <h4 className="font-bold text-lg sm:text-2xl">TailTalk Pet Hack</h4>
+            <h4 className="font-bold text-lg sm:text-2xl">{t.dashboard.petHacksTitle}</h4>
             <button 
               onClick={handleShuffleHack}
               className="text-gray-400 text-xs sm:text-sm hover:text-brand-orange transition-colors flex items-center gap-1 font-bold bg-white px-3 py-1.5 rounded-full shadow-sm hover:shadow-md"
             >
-              <RefreshCw className="w-3 h-3" /> Shuffle
+              <RefreshCw className="w-3 h-3" /> {t.dashboard.shuffle}
             </button>
           </div>
           <motion.div 

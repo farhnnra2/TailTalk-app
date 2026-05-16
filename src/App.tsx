@@ -14,23 +14,30 @@ import { CameraModal } from './components/CameraModal';
 import { UserProfile } from './components/UserProfile';
 import { NotificationPopup } from './components/NotificationPopup';
 import { LogoutAnimation } from './components/LogoutAnimation';
-import { PetProfile, AnalysisResult, AppNotification, UserProfile as UserProfileType } from './types';
+import { PetProfile, AnalysisResult, AppNotification, UserProfile as UserProfileType, HealthLog } from './types';
 import { analyzePetPhoto } from './services/geminiService';
 import { resizeImage } from './lib/imageResizer';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Camera, Check, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { orderBy, limit } from 'firebase/firestore';
+import { useLanguage } from './contexts/LanguageContext';
 
 type Screen = 'splash' | 'dashboard' | 'analysis' | 'profile';
 
 export default function App() {
+  const { language, t } = useLanguage();
   const [screen, setScreen] = useState<Screen>('splash');
   const [user, setUser] = useState<UserProfileType | null>(null);
   const [pets, setPets] = useState<PetProfile[]>([]);
+  const [allHealthLogs, setAllHealthLogs] = useState<HealthLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [captureSource, setCaptureSource] = useState<'camera' | 'gallery' | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<{ image: string, result: AnalysisResult, id?: string, name?: string } | null>(null);
+  const [healthLogs, setHealthLogs] = useState<HealthLog[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [activePopup, setActivePopup] = useState<AppNotification | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -133,12 +140,28 @@ export default function App() {
     const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(50));
     
     const unsubscribeNotifs = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          const isRecentlyCreated = data.createdAt?.toMillis ? (Date.now() - data.createdAt.toMillis() < 30000) : false;
+          
+          if (!data.isRead && isRecentlyCreated) {
+            setActivePopup({
+              id: change.doc.id,
+              text: data.text,
+              type: data.type || 'info',
+              time: t.common.now
+            });
+          }
+        }
+      });
+
       const notifs = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
           ...data,
-          time: data.createdAt?.toDate ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: 'numeric' }).format(data.createdAt.toDate()) : 'Now'
+          time: data.createdAt?.toDate ? new Intl.DateTimeFormat(language === 'id' ? 'id-ID' : 'en-US', { hour: 'numeric', minute: 'numeric' }).format(data.createdAt.toDate()) : t.common.now
         } as AppNotification;
       });
       setNotifications(notifs);
@@ -149,6 +172,110 @@ export default function App() {
 
     return () => unsubscribeNotifs();
   }, [user]);
+
+  useEffect(() => {
+    // Global Health Logs Listener (across all pets)
+    if (!user || pets.length === 0) {
+      setAllHealthLogs([]);
+      return;
+    }
+
+    // Since we can't easily use collectionGroup without manually creating indexes,
+    // we'll listen to logs for all pets and combine them.
+    // For a large number of pets this isn't ideal, but for this app it's fine.
+    const unsubscribes: (() => void)[] = [];
+    const logsMap: Record<string, HealthLog[]> = {};
+
+    pets.forEach(pet => {
+      const path = `users/${user.uid}/pets/${pet.id}/healthLogs`;
+      const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(5));
+      
+      const unsub = onSnapshot(q, (snapshot) => {
+        logsMap[pet.id] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          petName: pet.name // Add pet name for context in global view
+        } as HealthLog));
+        
+        // Flatten and sort all logs
+        const flattened = Object.values(logsMap).flat().sort((a, b) => {
+          const timeA = a.createdAt?.toMillis?.() || 0;
+          const timeB = b.createdAt?.toMillis?.() || 0;
+          return timeB - timeA;
+        });
+        setAllHealthLogs(flattened);
+      });
+      unsubscribes.push(unsub);
+    });
+
+    return () => unsubscribes.forEach(u => u());
+  }, [user, pets.length]); // Re-run if pets list changes
+
+  useEffect(() => {
+    // Health Logs Listener (only for the selected pet)
+    const petId = currentAnalysis?.id;
+    if (!user || !petId) {
+      setHealthLogs([]);
+      return;
+    }
+
+    const path = `users/${user.uid}/pets/${petId}/healthLogs`;
+    console.log(`Starting health logs listener for: ${path}`);
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    
+    const unsubscribeHealth = onSnapshot(q, (snapshot) => {
+      const logs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as HealthLog));
+      setHealthLogs(logs);
+    }, (error) => {
+      console.error("Health logs listener failed:", error);
+      // Not using handleFirestoreError here to avoid blocking UI if it's just a permissions delay
+    });
+
+    return () => unsubscribeHealth();
+  }, [user, currentAnalysis?.id]);
+
+  // Global Feeding Reminders Logic
+  const lastNotifiedMinute = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!user || pets.length === 0) return;
+
+    const checkReminders = () => {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      
+      if (currentTime === lastNotifiedMinute.current) return;
+
+      pets.forEach(pet => {
+        if (!pet.feedingRemindersEnabled || !pet.feedingTimes) return;
+        
+        const times = Object.values(pet.feedingTimes);
+        if (times.includes(currentTime)) {
+          lastNotifiedMinute.current = currentTime;
+          const message = t.notifications.feedingReminder.replace('{name}', pet.name);
+          
+          // Add to local notifications and show popup
+          addNotification(message, 'reminder');
+
+          // Native browser notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(t.notifications.reminderTitle, {
+              body: message,
+              icon: pet.imageUrl,
+            });
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkReminders, 30000); // Check every 30 seconds
+    checkReminders(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [user, pets, language]);
 
   const handleGetStarted = async () => {
     try {
@@ -166,16 +293,24 @@ export default function App() {
     
     const path = `users/${user.uid}/notifications`;
     try {
-      const docRef = await addDoc(collection(db, path), {
+      const data = {
         text,
         type,
+        ownerId: user.uid,
         isRead: false,
         createdAt: serverTimestamp()
-      });
+      };
+
+      // Remove undefined values
+      const sanitizedData = Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v !== undefined)
+      );
+
+      const docRef = await addDoc(collection(db, path), sanitizedData);
 
       // Show popup for reminders or important info
       if (type === 'reminder') {
-        setActivePopup({ id: docRef.id, text, type, time: 'Now' });
+        setActivePopup({ id: docRef.id, text, type, time: t.common.now });
       }
     } catch (error) {
       console.error("Failed to add notification", error);
@@ -259,7 +394,7 @@ export default function App() {
         ...updates
       });
 
-      addNotification("Profile updated successfully!");
+      addNotification(t.notifications.successUpdate);
     } catch (error) {
       console.error("Profile update failed", error);
       handleFirestoreError(error, 'WRITE', `users/${user.uid}`);
@@ -267,17 +402,28 @@ export default function App() {
     }
   };
 
-  const processImage = async (rawBase64: string) => {
+  const processImage = async (rawBase64: string, source: 'camera' | 'gallery') => {
+    setCapturedImage(rawBase64);
+    setCaptureSource(source);
+    setShowPreview(true);
+    setShowCamera(false);
+  };
+
+  const startAiAnalysis = async () => {
+    if (!capturedImage) return;
+    
     setIsAiProcessing(true);
+    setShowPreview(false);
     try {
-      const base64 = await resizeImage(rawBase64);
-      const result = await analyzePetPhoto(base64);
+      const base64 = await resizeImage(capturedImage);
+      const result = await analyzePetPhoto(base64, language);
       setCurrentAnalysis({ image: base64, result });
       setScreen('analysis');
-      setShowCamera(false);
+      setCapturedImage(null);
     } catch (error) {
       console.error("AI Analysis failed", error);
-      alert("Failed to analyze pet photo. Please try again with a clearer image.");
+      alert(t.notifications.errorAnalysis);
+      setCapturedImage(null);
     } finally {
       setIsAiProcessing(false);
     }
@@ -290,9 +436,11 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const b64 = event.target?.result as string;
-      await processImage(b64);
+      processImage(b64, 'gallery');
     };
     reader.readAsDataURL(file);
+    // Reset input so the same file can be selected again
+    e.target.value = '';
   };
 
   const handleSavePet = async (name: string, feedingData?: { enabled: boolean, times: { breakfast: string, lunch: string, dinner: string } }, additionalAnalysis?: Partial<AnalysisResult>) => {
@@ -316,17 +464,31 @@ export default function App() {
         if (additionalAnalysis.nutritionTip) data.nutritionTip = additionalAnalysis.nutritionTip;
       }
 
+      const cleanedResult: any = {};
+      const result = currentAnalysis.result;
+      const allowedResultFields = ['category', 'breed', 'ageEstimation', 'energyLevel', 'carePlan', 'diyHacks', 'foodRecommendations', 'nutritionTip', 'foodSafety'];
+      
+      allowedResultFields.forEach(field => {
+        if ((result as any)[field] !== undefined && (result as any)[field] !== null) {
+          cleanedResult[field] = (result as any)[field];
+        }
+      });
+
       if (currentAnalysis.id) {
         // Update existing
-        await updateDoc(doc(db, `${path}/${currentAnalysis.id}`), data);
+        await updateDoc(doc(db, `${path}/${currentAnalysis.id}`), {
+          ...data,
+          ...cleanedResult
+        });
       } else {
         // Create new
         await addDoc(collection(db, path), {
           ...data,
-          ...currentAnalysis.result,
+          ...cleanedResult,
           imageUrl: currentAnalysis.image,
           ownerId: user.uid,
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp() // Ensure it's there for creation too
         });
       }
       
@@ -334,7 +496,7 @@ export default function App() {
       setCurrentAnalysis(null);
     } catch (error) {
       handleFirestoreError(error, 'WRITE', path);
-      alert("Failed to save pet profile. " + (error instanceof Error ? error.message : ""));
+      alert(t.notifications.errorSave + " " + (error instanceof Error ? error.message : ""));
     }
   };
 
@@ -347,7 +509,50 @@ export default function App() {
       setCurrentAnalysis(null);
     } catch (error) {
       handleFirestoreError(error, 'DELETE', path);
-      alert("Failed to delete pet profile.");
+      alert(t.notifications.errorDelete);
+    }
+  };
+
+  const handleSaveHealthLog = async (log: Omit<HealthLog, 'id' | 'createdAt'>) => {
+    const petId = currentAnalysis?.id;
+    if (!user || !petId) return;
+
+    const path = `users/${user.uid}/pets/${petId}/healthLogs`;
+    try {
+      // Create a clean object for Firestore, strictly avoiding undefined values
+      const firestoreData: any = {
+        petId,
+        ownerId: user.uid,
+        createdAt: serverTimestamp()
+      };
+
+      // Copy allowed fields from log if they are defined
+      const fields = ['symptoms', 'imageUrl', 'diagnosis', 'description', 'careInstructions', 'vetUrgency'];
+      fields.forEach(field => {
+        if ((log as any)[field] !== undefined && (log as any)[field] !== null) {
+          if (field === 'vetUrgency') {
+            firestoreData[field] = String((log as any)[field]).toLowerCase();
+          } else {
+            firestoreData[field] = (log as any)[field];
+          }
+        } else if (field === 'symptoms' || field === 'diagnosis' || field === 'description' || field === 'careInstructions') {
+          firestoreData[field] = ''; // Fallback for required string fields
+        } else if (field === 'vetUrgency') {
+          firestoreData[field] = 'medium'; // Default fallback
+        }
+      });
+
+      await addDoc(collection(db, path), firestoreData);
+
+      // Also update the pet's last health check timestamp and updatedAt
+      const petRef = doc(db, `users/${user.uid}/pets/${petId}`);
+      await updateDoc(petRef, {
+        lastHealthCheck: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Failed to save health log", error);
+      handleFirestoreError(error, 'WRITE', path);
     }
   };
 
@@ -407,7 +612,7 @@ export default function App() {
                     energyLevel: pet.energyLevel,
                     carePlan: pet.carePlan,
                     diyHacks: pet.diyHacks,
-                    foodSafety: "Ask me about food safety!",
+                    foodSafety: t.petAnalysis.readyFor.replace('{category}', (t.petAnalysis.categoriesList as any)[pet.category] || pet.category), // Placeholder for food safety initial text
                     foodRecommendations: pet.foodRecommendations,
                     nutritionTip: pet.nutritionTip
                   },
@@ -446,7 +651,13 @@ export default function App() {
                 }
               }}
               onDelete={currentAnalysis.id ? () => handleDeletePet(currentAnalysis.id!) : undefined}
+              onSaveHealthLog={handleSaveHealthLog}
+              healthLogs={healthLogs}
               addNotification={addNotification}
+              notifications={notifications}
+              onDeleteNotification={deleteNotification}
+              onClearAllNotifications={clearAllNotifications}
+              onMarkNotificationsRead={markNotificationsAsRead}
             />
           </motion.div>
         )}
@@ -456,9 +667,14 @@ export default function App() {
             <UserProfile 
               user={user}
               pets={pets}
+              healthLogs={allHealthLogs}
               onBack={() => setScreen('dashboard')}
               onLogout={handleLogout}
               onUpdateProfile={handleUpdateProfile}
+              notifications={notifications}
+              onDeleteNotification={deleteNotification}
+              onClearAllNotifications={clearAllNotifications}
+              onMarkNotificationsRead={markNotificationsAsRead}
             />
           </motion.div>
         )}
@@ -476,9 +692,67 @@ export default function App() {
       <AnimatePresence>
         {showCamera && (
           <CameraModal 
-            onCapture={processImage}
+            onCapture={(img) => processImage(img, 'camera')}
             onClose={() => setShowCamera(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Image Preview and Confirmation */}
+      <AnimatePresence>
+        {showPreview && capturedImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black flex flex-col items-center justify-center p-6"
+          >
+            <div className="w-full max-w-md bg-white rounded-[40px] overflow-hidden shadow-2xl flex flex-col">
+              <div className="p-8 pb-4 flex justify-between items-center">
+                <h3 className="text-xl font-black text-gray-900 uppercase tracking-widest">{t.camera.previewTitle}</h3>
+                <button 
+                  onClick={() => {
+                    setShowPreview(false);
+                    setCapturedImage(null);
+                  }}
+                  className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-8 pb-8 flex-1">
+                <div className="aspect-[4/3] rounded-[32px] overflow-hidden bg-gray-100 border-4 border-white shadow-inner mb-8">
+                  <img src={capturedImage} className="w-full h-full object-cover" alt="Captured" />
+                </div>
+
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => {
+                      const wasCamera = captureSource === 'camera';
+                      setShowPreview(false);
+                      setCapturedImage(null);
+                      setCaptureSource(null);
+                      if (wasCamera) {
+                        setShowCamera(true);
+                      }
+                    }}
+                    className="flex-1 py-5 rounded-3xl bg-gray-100 text-gray-500 font-extrabold uppercase tracking-widest text-sm flex items-center justify-center gap-2 hover:bg-gray-200 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    {t.camera.retake}
+                  </button>
+                  <button 
+                    onClick={startAiAnalysis}
+                    className="flex-[1.5] py-5 rounded-3xl bg-brand-orange text-white font-extrabold uppercase tracking-widest text-sm flex items-center justify-center gap-2 shadow-lg shadow-orange-200 active:scale-95 transition-all"
+                  >
+                    <Check className="w-5 h-5" />
+                    {t.camera.confirm}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -486,8 +760,8 @@ export default function App() {
       {isAiProcessing && (
         <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center">
           <Loader2 className="w-12 h-12 text-brand-orange animate-spin mb-6" />
-          <h3 className="text-xl font-bold text-gray-900 mb-2">TailTalk Scanning...</h3>
-          <p className="text-gray-500 text-sm max-w-xs mx-auto">TailTalk AI is identifying breeds, estimating age, and preparing personalized care tips for your friend.</p>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">{t.petAnalysis.scanning}</h3>
+          <p className="text-gray-500 text-sm max-w-xs mx-auto">{t.petAnalysis.scanningSubtitle}</p>
         </div>
       )}
 

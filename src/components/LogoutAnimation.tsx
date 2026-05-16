@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PetProfile } from '../types';
 import { HeartOff, MessageCircle } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface LogoutAnimationProps {
   pets: PetProfile[];
@@ -9,6 +10,7 @@ interface LogoutAnimationProps {
 }
 
 export const LogoutAnimation: React.FC<LogoutAnimationProps> = ({ pets, onComplete }) => {
+  const { t } = useLanguage();
   React.useEffect(() => {
     const timer = setTimeout(() => {
       onComplete();
@@ -32,8 +34,8 @@ export const LogoutAnimation: React.FC<LogoutAnimationProps> = ({ pets, onComple
         <div className="w-20 h-20 bg-white/10 rounded-3xl flex items-center justify-center mb-4 mx-auto">
           <HeartOff className="w-10 h-10 text-white animate-pulse" />
         </div>
-        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">Time to go?</h2>
-        <p className="text-gray-400 font-bold uppercase text-xs tracking-[0.3em]">Your friends will miss you...</p>
+        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">{t.logout.leavingTitle}</h2>
+        <p className="text-gray-400 font-bold uppercase text-xs tracking-[0.3em]">{t.logout.leavingSubtitle}</p>
       </motion.div>
 
       <div className="flex flex-wrap justify-center gap-8 max-w-2xl">
@@ -54,7 +56,7 @@ export const LogoutAnimation: React.FC<LogoutAnimationProps> = ({ pets, onComple
                 className="absolute -top-16 bg-white rounded-2xl px-4 py-2 shadow-xl"
               >
                 <p className="text-[10px] font-black text-gray-800 uppercase whitespace-nowrap">
-                  Goodbye, {pet.name.split(' ')[0]} stays here...
+                   {t.logout.petFarewell.replace('{name}', pet.name.split(' ')[0])}
                 </p>
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-white rotate-45" />
               </motion.div>
@@ -91,7 +93,7 @@ export const LogoutAnimation: React.FC<LogoutAnimationProps> = ({ pets, onComple
             animate={{ opacity: 1 }} 
             className="text-white/40 font-bold italic"
           >
-            No pets to say goodbye... but we'll miss you anyway!
+            {t.logout.noPetsLeaving}
           </motion.div>
         )}
       </div>

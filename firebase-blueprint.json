@@ -40,6 +40,22 @@
         }
       },
       "required": ["name", "imageUrl", "ownerId", "breed"]
+    },
+    "HealthLog": {
+      "title": "Health Log",
+      "description": "Log of pet health symptoms and AI analysis",
+      "type": "object",
+      "properties": {
+        "petId": { "type": "string" },
+        "symptoms": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "diagnosis": { "type": "string" },
+        "description": { "type": "string" },
+        "careInstructions": { "type": "string" },
+        "vetUrgency": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["petId", "symptoms", "diagnosis"]
     }
   },
   "firestore": {
@@ -50,6 +66,10 @@
     "/users/{userId}/pets/{petId}": {
       "schema": "Pet",
       "description": "Pet profiles belonging to a user"
+    },
+    "/users/{userId}/pets/{petId}/healthLogs/{logId}": {
+      "schema": "HealthLog",
+      "description": "Health analysis logs for a pet"
     }
   }
 }

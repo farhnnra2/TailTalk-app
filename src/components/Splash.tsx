@@ -3,11 +3,14 @@ import { motion } from 'motion/react';
 import { PawPrint } from 'lucide-react';
 import { cn } from '../lib/utils';
 
+import { useLanguage } from '../contexts/LanguageContext';
+
 interface SplashProps {
   onGetStarted: () => void;
 }
 
 export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
+  const { t, language, setLanguage } = useLanguage();
   return (
     <div className="relative min-h-screen w-full bg-brand-cream overflow-hidden flex flex-col items-center justify-between py-12 px-6 sm:px-12">
       {/* Decorative Stripes */}
@@ -16,6 +19,28 @@ export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
         <div className="w-16 sm:w-24 h-[120%] bg-[#a8dadc] rounded-full opacity-80" />
         <div className="w-16 sm:w-24 h-[120%] bg-[#f4a261] rounded-full opacity-80" />
         <div className="w-16 sm:w-24 h-[120%] bg-[#e76f51] rounded-full opacity-80" />
+      </div>
+
+      {/* Language Toggle */}
+      <div className="absolute top-6 right-6 z-50 bg-white/20 backdrop-blur-md rounded-full p-1 border border-white/30 flex gap-1">
+        <button 
+          onClick={() => setLanguage('id')}
+          className={cn(
+            "px-4 py-1.5 rounded-full text-xs font-black transition-all uppercase tracking-widest",
+            language === 'id' ? "bg-brand-orange text-white shadow-lg" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          ID
+        </button>
+        <button 
+          onClick={() => setLanguage('en')}
+          className={cn(
+            "px-4 py-1.5 rounded-full text-xs font-black transition-all uppercase tracking-widest",
+            language === 'en' ? "bg-brand-orange text-white shadow-lg" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          EN
+        </button>
       </div>
 
       <div className="z-10 flex flex-col items-center mt-24 sm:mt-32 lg:mt-48 text-center max-w-2xl">
@@ -32,7 +57,7 @@ export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
           animate={{ opacity: 1, y: 0 }}
           className="text-4xl sm:text-6xl font-black text-gray-900 leading-tight mb-6"
         >
-          Unlock Your Pet’s <br /> World with TailTalk
+          {t.splash.title}
         </motion.h1>
         
         <motion.p 
@@ -41,7 +66,7 @@ export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
           transition={{ delay: 0.1 }}
           className="text-gray-500 text-lg sm:text-2xl px-4 leading-relaxed"
         >
-          Analyze profiles, get smart care hacks, and keep your best friend happy with TailTalk.
+          {t.splash.subtitle}
         </motion.p>
       </div>
 
@@ -52,7 +77,7 @@ export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
           onClick={onGetStarted}
           className="w-full bg-brand-orange text-white font-black py-6 rounded-[32px] shadow-2xl shadow-orange-200 text-xl lg:text-2xl hover:bg-opacity-90 transition-all"
         >
-          Get Started
+          {t.splash.getStarted}
         </motion.button>
         
         <motion.p 
@@ -61,8 +86,15 @@ export const Splash: React.FC<SplashProps> = ({ onGetStarted }) => {
           transition={{ delay: 0.5 }}
           className="text-gray-400 text-sm sm:text-base font-bold text-center px-6 leading-relaxed"
         >
-          Welcome! Great paw-renting starts here. <br/>
-          <span className="text-brand-orange/60 text-[10px] uppercase tracking-[0.2em] mt-2 block">Powered by TailTalk AI</span>
+          {t.splash.welcome} <br/>
+          <a 
+            href="https://www.instagram.com/farhhnnr_/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-orange/60 text-[10px] uppercase tracking-[0.2em] mt-2 block hover:text-brand-orange hover:scale-105 transition-all cursor-pointer font-black"
+          >
+            {t.splash.poweredBy}
+          </a>
         </motion.p>
       </div>
       

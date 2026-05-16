@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Bell, Utensils, Zap } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface NotificationPopupProps {
   notification: {
@@ -12,6 +13,7 @@ interface NotificationPopupProps {
 }
 
 export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notification, onClose }) => {
+  const { t } = useLanguage();
   if (!notification) return null;
 
   return (
@@ -44,7 +46,7 @@ export const NotificationPopup: React.FC<NotificationPopupProps> = ({ notificati
           
           <div className="flex-1">
             <h4 className="font-black text-brand-orange text-xs uppercase tracking-widest mb-1 flex items-center gap-2">
-              <Zap className="w-3 h-3 fill-brand-orange" /> TailTalk Alert
+              <Zap className="w-3 h-3 fill-brand-orange" /> {t.petAnalysis.tailTalkAlert}
             </h4>
             <p className="font-bold text-gray-800 text-sm sm:text-base leading-snug">
               {notification.text}

@@ -35,6 +35,8 @@ export interface PetProfile {
   };
   foodRecommendations?: string;
   nutritionTip?: string;
+  foodSafety?: string;
+  lastHealthCheck?: any;
 }
 
 export interface UserProfile {
@@ -43,6 +45,27 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   createdAt: string;
+}
+
+export interface HealthLog {
+  id: string;
+  petId: string;
+  ownerId?: string;
+  petName?: string;
+  symptoms: string;
+  imageUrl?: string;
+  diagnosis: string;
+  description: string;
+  careInstructions: string;
+  vetUrgency: 'low' | 'medium' | 'high';
+  createdAt: any;
+}
+
+export interface HealthAnalysisResult {
+  diagnosis: string;
+  description: string;
+  careInstructions: string;
+  vetUrgency: 'low' | 'medium' | 'high';
 }
 
 export interface AnalysisResult {

@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { Camera, X, RefreshCw, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface CameraModalProps {
   onCapture: (image: string) => void;
@@ -9,6 +10,7 @@ interface CameraModalProps {
 }
 
 export const CameraModal: React.FC<CameraModalProps> = ({ onCapture, onClose }) => {
+  const { t } = useLanguage();
   const webcamRef = useRef<Webcam>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
@@ -39,7 +41,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({ onCapture, onClose }) 
           <X className="w-6 h-6" />
         </button>
         <div className="text-white font-black uppercase tracking-widest text-xs">
-          Scan Your Pet
+          {t.camera.title}
         </div>
         <button 
           onClick={toggleFacingMode}
@@ -73,7 +75,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({ onCapture, onClose }) 
             
             <div className="flex flex-col items-center gap-2 opacity-40">
               <Zap className="w-8 h-8 text-white" />
-              <span className="text-white text-[10px] font-black uppercase">Center your pet</span>
+              <span className="text-white text-[10px] font-black uppercase">{t.camera.positionCenter}</span>
             </div>
           </div>
         </div>
@@ -82,7 +84,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({ onCapture, onClose }) 
       {/* Footer Controls */}
       <div className="absolute bottom-0 left-0 right-0 p-12 flex flex-col items-center gap-6 bg-gradient-to-t from-black/80 to-transparent">
         <p className="text-white/60 text-xs text-center max-w-[200px]">
-          Point your camera at your pet for best analysis results
+          {t.camera.footerTip}
         </p>
         <button 
           onClick={capture}
